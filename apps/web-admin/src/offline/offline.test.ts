@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { enqueue, listOps, removeOps } from './store';
-import { totalsOf, unitPriceOf, type MenuModifierGroup, type MenuProduct } from './estimate';
+import { totalsOf, unitPriceOf, type MenuModifierGroup, type MenuProduct } from '@retroburger/ui';
 
 const burger: MenuProduct = { id: 'b', name: 'Retro Burger', price: 129, kind: 'SIMPLE', variants: [{ id: 'v1', name: 'Doble', priceDelta: 40 }], comboSlots: [], modifierGroupIds: ['g'] };
 const groups: MenuModifierGroup[] = [{ id: 'g', name: 'Extras', type: 'EXTRA', minSelect: 0, maxSelect: 3, modifiers: [{ id: 'q', name: 'Queso', priceDelta: 15 }, { id: 't', name: 'Tocino', priceDelta: 25 }] }];

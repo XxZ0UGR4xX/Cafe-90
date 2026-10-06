@@ -1,0 +1,29 @@
+name: CI
+on: { push: { branches: ['**'] }, pull_request: {} }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Roles y bases de prueba
+        run: |
+          export PGPASSWORD=postgres
+          psql -h localhost -U postgres -c "CREATE ROLE retroburger_owner LOGIN PASSWORD 'owner_dev' CREATEDB"
+          psql -h localhost -U postgres -c "CREATE ROLE retroburger_app LOGIN PASSWORD 'app_dev' NOSUPERUSER NOBYPASSRLS"
+          psql -h localhost -U postgres -c "CREATE DATABASE retroburger_test OWNER retroburger_owner"
+          psql -h localhost -U postgres -d retroburger_test -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS btree_gist;"
+      - run: pnpm --filter @retroburger/shared build
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: pnpm --filter @retroburger/web-admin build && pnpm --filter @retroburger/web-public build

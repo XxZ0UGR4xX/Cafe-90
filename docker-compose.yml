@@ -1,0 +1,9 @@
+# Entorno local mínimo: PostgreSQL. (API y webs se ejecutan con pnpm; ver README.)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?define POSTGRES_ADMIN_PASSWORD}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+volumes: { pgdata: {} }

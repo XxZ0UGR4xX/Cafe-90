@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { RetroButton, RetroCheck, RetroInput, RetroModal, formatMoney } from '@retroburger/ui';
-import { unitPriceOf, type CartLine, type MenuModifierGroup, type MenuProduct } from '../../offline/estimate';
+import { RetroButton, RetroCheck, RetroInput } from '../components/core';
+import { RetroModal } from '../components/overlay';
+import { formatMoney } from '../components/domain';
+import { unitPriceOf, type CartLine, type MenuModifierGroup, type MenuProduct } from './estimate';
 
 export interface MenuData { products: (MenuProduct & { categoryId: string | null; available: boolean; imageUrl?: string | null; description?: string | null; stationKey?: string | null })[]; modifierGroups: MenuModifierGroup[]; categories: { id: string; name: string; icon: string | null; color: string | null }[] }
 

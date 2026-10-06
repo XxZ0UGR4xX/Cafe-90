@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CartLine } from '../../offline/estimate';
+import type { CartLine } from '@retroburger/ui';
 
 export type Channel = 'DINE_IN' | 'TAKEAWAY';
 export interface OfflineOrder { clientUuid: string; label: string; lines: CartLine[]; total: number; channel: Channel; tableId?: string; branchId: string; paid: boolean; createdAt: string }

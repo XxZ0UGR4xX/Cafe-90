@@ -9,11 +9,11 @@ import { play } from '../app/sound';
 import { useWithSupervisor } from '../app/supervisor';
 import { cacheGet, cacheSet, enqueue } from '../offline/store';
 import { refreshPending, syncNow, useConnection } from '../offline/connection';
-import { totalsOf, type CartLine } from '../offline/estimate';
+import { totalsOf, type CartLine } from '@retroburger/ui';
 import { useCart } from './pos/cart';
 import { PayDialog, type PaymentDraft } from './pos/PayDialog';
 import { CustomerPicker, DiscountDialog, NoteDialog, SplitDialog, TablePicker } from './pos/Pickers';
-import { ProductDialog, type MenuData } from './pos/ProductDialog';
+import { ProductDialog, type MenuData } from '@retroburger/ui';
 
 const toItems = (lines: CartLine[]) => lines.map((l) => ({ productId: l.productId, variantId: l.variantId, qty: l.qty, notes: l.notes, modifierIds: l.modifierIds, comboChoices: l.comboChoices }));
 
