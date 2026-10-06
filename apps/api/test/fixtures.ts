@@ -7,7 +7,7 @@ export interface Fixture {
   api: Api; t: { tenantId: string; slug: string; adminEmail: string };
   admin: string; branchId: string; tables: string[];
   ing: Record<string, string>; prod: Record<string, string>; groups: Record<string, string>; slots: Record<string, string>;
-  tokens: { gerente: string; cajero: string; mesero: string; cocinero: string; almacen: string };
+  tokens: { gerente: string; cajero: string; mesero: string; cocinero: string; almacen: string; repartidor: string };
   users: Record<string, { id: string; email: string; userCode: string }>;
   stock(ing: string): Promise<number>;
   reconcile(): Promise<{ ingredient: string; qty: number; sum: number }[]>;
@@ -68,12 +68,13 @@ export async function buildFixture(api: Api, label = 'f'): Promise<Fixture> {
   const users: Fixture['users'] = {};
   const mk = async (role: string, tag: string) => { const u = await createUser(api, admin, t, role, [branch.id], tag); users[tag] = u; return login(api, t, u.email); };
   const tokens = { gerente: await mk('GERENTE', 'gerente'), cajero: await mk('CAJERO', 'cajero'), mesero: await mk('MESERO', 'mesero'),
-    cocinero: await mk('COCINERO', 'cocinero'), almacen: await mk('ALMACEN', 'almacen') };
+    cocinero: await mk('COCINERO', 'cocinero'), almacen: await mk('ALMACEN', 'almacen'), repartidor: await mk('REPARTIDOR', 'repartidor') };
 
   const owner = new Pool({ connectionString: process.env.DATABASE_URL });
   const sql = async <T = any>(text: string, params: unknown[] = []): Promise<T[]> => {
     const c = await owner.connect();
     try { await c.query('BEGIN'); await c.query("SELECT set_config('app.tenant_id',$1,true)", [t.tenantId]); const r = await c.query(text, params); await c.query('COMMIT'); return r.rows; }
+    catch (e) { await c.query('ROLLBACK').catch(() => undefined); throw e; }
     finally { c.release(); }
   };
   return {

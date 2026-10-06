@@ -23,9 +23,12 @@ export class FloorService {
               EXTRACT(EPOCH FROM (now() - ts.opened_at))::int AS "occupiedSeconds",
               COALESCE((SELECT sum(o.total) FROM orders o WHERE o.table_session_id = ts.id AND o.status <> 'CANCELLED'), 0) AS "currentTotal",
               COALESCE((SELECT sum(o.paid_total) FROM orders o WHERE o.table_session_id = ts.id AND o.status <> 'CANCELLED'), 0) AS "paidTotal",
-              (SELECT array_agg(table_id) FROM table_session_tables WHERE session_id = ts.id) AS "mergedTableIds"
+              (SELECT array_agg(table_id) FROM table_session_tables WHERE session_id = ts.id) AS "mergedTableIds",
+              (SELECT json_build_object('id', r.id, 'customerName', r.customer_name, 'startsAt', r.starts_at, 'partySize', r.party_size)
+                 FROM reservations r WHERE r.table_id = t.id AND r.status IN ('PENDING','CONFIRMED') AND r.starts_at < now() + interval '60 minutes' AND r.ends_at > now()
+                ORDER BY r.starts_at LIMIT 1) AS reservation
          FROM tables t LEFT JOIN table_sessions ts ON ts.table_id = t.id AND ts.status = 'OPEN' LEFT JOIN users w ON w.id = ts.waiter_id
-        WHERE t.branch_id = $1 ORDER BY t.number`, [branchId])).rows);
+        WHERE t.branch_id = $1 ORDER BY t.number`, [branchId])).rows.map((t) => ({ ...t, status: t.status === 'FREE' && t.reservation ? 'RESERVED' : t.status })));
   }
 
   save(branchId: string, id: string | null, d: Dict) {

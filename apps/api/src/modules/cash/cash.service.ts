@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DbService, Tx } from '../../database/db.service';
 import { AppError, forbidden, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
+import { DomainEvents } from '../../common/domain-events';
 import { AuditService } from '../audit/audit.service';
 import { SupervisorService } from '../identity/supervisor.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -15,7 +16,7 @@ const DEFAULT_EXPENSE_LIMIT = 500;
 @Injectable()
 export class CashService {
   constructor(private readonly db: DbService, private readonly audit: AuditService, private readonly supervisor: SupervisorService,
-    private readonly notifications: NotificationsService, private readonly settings: SettingsService) {}
+    private readonly notifications: NotificationsService, private readonly settings: SettingsService, private readonly events: DomainEvents) {}
 
   private assertBranch(perm: string, branchId: string) {
     if (!ctx().principal!.can(perm, branchId)) throw forbidden({ permission: perm, branchId });
@@ -193,7 +194,10 @@ export class CashService {
       await this.audit.record(q, { action: 'cash_shift.close', entity: 'cash_shift', entityId: id, branchId: s.branch_id, newValue: { expected: summary.expectedCash, counted: d.countedCash, difference }, reason: d.notes });
       if (Math.abs(difference) > tolerance)
         await this.notifications.emit(q, { type: 'CASH_DIFFERENCE', severity: 'WARNING', branchId: s.branch_id, title: `💰 Corte con diferencia de ${difference}`, body: p.fullName, dedupeKey: `shift:${id}` });
-      return this.shiftById(q, id);
+      const closed = await this.shiftById(q, id);
+      const br = (await q.query('SELECT name FROM branches WHERE id=$1', [s.branch_id])).rows[0];
+      await this.events.emit(q, { type: 'CashShiftClosed', branchId: s.branch_id, payload: { shiftId: id, report: { ...report, branchName: br.name, userName: closed.userName, openedAt: closed.openedAt, closedAt: closed.closedAt } } });
+      return closed;
     });
   }
 }

@@ -50,4 +50,9 @@ export class Principal {
     }
     return new Principal(userId, tenantId, fullName, [...grants.values()], scopes);
   }
+
+  /** Principal sintético (sin login) para flujos públicos/QR: sólo los permisos indicados, todas las sucursales. */
+  static system(userId: string, tenantId: string, name: string, permissions: string[]): Principal {
+    return new Principal(userId, tenantId, name, [], new Map(permissions.map((p) => [p, 'ALL' as const])));
+  }
 }

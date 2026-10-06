@@ -9,6 +9,7 @@ import { FloorService } from '../floor/floor.service';
 import { SupervisorService, type SupervisorInput } from '../identity/supervisor.service';
 import { InventoryEngine } from '../inventory/inventory.engine';
 import { SettingsService } from '../tenancy/settings.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { LineBuilder, type BuiltLine } from './sales.lines';
 import { amountToCents, centsToAmount, computeTotals, discountCents } from './pricing';
 
@@ -22,6 +23,7 @@ export class SalesService {
     private readonly db: DbService, private readonly lines: LineBuilder, private readonly engine: InventoryEngine,
     private readonly audit: AuditService, private readonly events: DomainEvents, private readonly floor: FloorService,
     private readonly supervisor: SupervisorService, private readonly settings: SettingsService,
+    private readonly promotions: PromotionsService,
   ) {}
 
   private assertBranch(perm: string, branchId: string) {
@@ -69,6 +71,7 @@ export class SalesService {
 
   /** Recalcula totales de la orden desde sus items vigentes y descuentos. */
   async recalc(q: Tx, orderId: string) {
+    await this.promotions.applyTo(q, orderId);   // promociones automáticas y cupones vigentes
     const items = (await q.query(
       `SELECT id, line_total, tax_rate, tax_included, unit_cost, qty, parent_item_id FROM order_items WHERE order_id=$1 AND ${ACTIVE_ITEM}`, [orderId])).rows;
     const subtotal = items.reduce((a, i) => a + amountToCents(i.line_total), 0);
@@ -82,9 +85,10 @@ export class SalesService {
     const t = computeTotals(items.map((i) => ({ id: i.id, lineCents: amountToCents(i.line_total), taxRate: i.tax_rate, taxIncluded: i.tax_included })), discount);
     for (const l of t.lines) await q.query('UPDATE order_items SET line_tax=$2 WHERE id=$1', [l.id, centsToAmount(l.taxCents)]);
     const cost = items.reduce((a, i) => a + i.unit_cost * i.qty, 0);
+    const fee = (await q.query('SELECT delivery_fee FROM orders WHERE id=$1', [orderId])).rows[0].delivery_fee as number;
     const tipTotal = (await q.query(`SELECT COALESCE(sum(tip),0) AS t FROM payments WHERE order_id=$1`, [orderId])).rows[0].t;
     await q.query(`UPDATE orders SET subtotal=$2, discount_total=$3, tax_total=$4, total=$5, cost_total=$6, tip_total=$7 WHERE id=$1`,
-      [orderId, centsToAmount(t.subtotal), centsToAmount(t.discount), centsToAmount(t.tax), centsToAmount(t.total), r4(cost), tipTotal]);
+      [orderId, centsToAmount(t.subtotal), centsToAmount(t.discount), centsToAmount(t.tax), r4(centsToAmount(t.total) + fee), r4(cost), tipTotal]);
   }
 
   // ───────────────────────── creación ─────────────────────────
@@ -137,9 +141,9 @@ export class SalesService {
       const number = (await q.query(`SELECT next_counter($1) AS n`, [`order:${d.branchId}:${b.bdate}`])).rows[0].n;
       const uid = ctx().principal!.userId;
       const order = (await q.query(
-        `INSERT INTO orders (tenant_id, branch_id, number, business_date, channel, status, table_session_id, table_id, customer_id, customer_name, waiter_id, guests, notes, client_uuid, needs_review, created_by)
-         VALUES (app_tenant_id(),$1,$2,$3,$4,'PENDING',$5,$6,$7,$8,$9,$10,$11,$12,$13,$9) RETURNING id`,
-        [d.branchId, number, b.bdate, d.channel, sessionId, tableId, d.customerId ?? null, d.customerName ?? null, uid, d.guests ?? null, d.notes ?? null, d.clientUuid ?? null, !!d.offline])).rows[0];
+        `INSERT INTO orders (tenant_id, branch_id, number, business_date, channel, status, table_session_id, table_id, customer_id, customer_name, waiter_id, guests, notes, client_uuid, needs_review, created_by, source)
+         VALUES (app_tenant_id(),$1,$2,$3,$4,'PENDING',$5,$6,$7,$8,$9,$10,$11,$12,$13,$9,$14) RETURNING id`,
+        [d.branchId, number, b.bdate, d.channel, sessionId, tableId, d.customerId ?? null, d.customerName ?? null, uid, d.guests ?? null, d.notes ?? null, d.clientUuid ?? null, !!d.offline, d.source ?? 'STAFF'])).rows[0];
       await this.insertLines(q, order.id, built);
       await this.recalc(q, order.id);
       await q.query(`INSERT INTO order_events (tenant_id, order_id, from_status, to_status, user_id) VALUES (app_tenant_id(),$1,NULL,'PENDING',$2)`, [order.id, uid]);
@@ -168,6 +172,7 @@ export class SalesService {
 
   /** Meseros sólo editan sus propias órdenes salvo que tengan acceso a todas. */
   private assertOwner(o: Dict) {
+    if (o.source === 'PUBLIC' || o.source === 'QR') return;   // pedidos en línea/QR: cualquier personal de la sucursal puede atenderlos
     const p = ctx().principal!;
     if (!p.can('sales.order.readAll', o.branch_id) && o.waiter_id !== p.userId && o.created_by !== p.userId) throw forbidden({ reason: 'orden ajena' });
   }
@@ -251,6 +256,11 @@ export class SalesService {
       const o = await this.lockOrder(q, orderId);
       this.assertBranch('sales.order.update', o.branch_id);
       if (['CANCELLED', 'COMPLETED'].includes(o.status)) throw new AppError('ORDER_INVALID_TRANSITION', 409, { status: o.status });
+      if (o.source === 'PUBLIC' || o.source === 'QR') {   // quien confirma un pedido en línea/QR se vuelve su mesero responsable
+        const me = ctx().principal!.userId;
+        await q.query(`UPDATE orders SET waiter_id=$2 WHERE id=$1 AND waiter_id IN (SELECT id FROM users WHERE is_system)`, [orderId, me]);
+        if (o.table_session_id) await q.query(`UPDATE table_sessions SET waiter_id=$2 WHERE id=$1 AND waiter_id IN (SELECT id FROM users WHERE is_system)`, [o.table_session_id, me]);
+      }
       const pending = (await q.query(`SELECT id, parent_item_id, station_key, product_id FROM order_items WHERE order_id=$1 AND status='PENDING' ORDER BY created_at, id`, [orderId])).rows;
       if (!pending.length) return this.get(orderId, q);
 
@@ -405,11 +415,11 @@ export class SalesService {
                 o.table_session_id AS "tableSessionId", o.table_id AS "tableId", t.number AS "tableNumber", o.customer_id AS "customerId", o.customer_name AS "customerName",
                 o.waiter_id AS "waiterId", w.full_name AS "waiterName", o.guests, o.subtotal, o.discount_total AS "discountTotal", o.tax_total AS "taxTotal", o.tip_total AS "tipTotal",
                 o.total, o.paid_total AS "paidTotal", o.notes, o.needs_review AS "needsReview", o.cancel_reason AS "cancelReason", o.created_at AS "createdAt", o.sent_at AS "sentAt", o.closed_at AS "closedAt",
-                o.version, ${ctx().principal!.can('catalog.cost.read', undefined) ? 'o.cost_total' : 'NULL::numeric'} AS "costTotal"
+                o.version, o.source, ${ctx().principal!.can('catalog.cost.read', undefined) ? 'o.cost_total' : 'NULL::numeric'} AS "costTotal"
            FROM orders o LEFT JOIN tables t ON t.id = o.table_id LEFT JOIN users w ON w.id = o.waiter_id WHERE o.id=$1`, [id])).rows[0];
       if (!o) throw notFound('order');
       this.assertBranch('sales.order.read', o.branchId);
-      this.assertOwner({ branch_id: o.branchId, waiter_id: o.waiterId, created_by: o.waiterId });
+      this.assertOwner({ branch_id: o.branchId, waiter_id: o.waiterId, created_by: o.waiterId, source: o.source });
       const items = (await q.query(
         `SELECT oi.id, oi.parent_item_id AS "parentItemId", oi.product_id AS "productId", oi.variant_id AS "variantId", oi.slot_name AS "slotName", oi.name, oi.qty, oi.unit_price AS "unitPrice",
                 oi.line_total AS "lineTotal", oi.status, oi.station_key AS "stationKey", oi.notes,

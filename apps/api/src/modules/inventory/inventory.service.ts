@@ -160,7 +160,8 @@ export class InventoryService {
 
   createTransfer(d: Dict) {
     if (d.fromBranchId === d.toBranchId) throw new AppError('VALIDATION_ERROR', 400, { field: 'toBranchId' });
-    this.assertBranch('inventory.transfer.write', d.toBranchId);  // el destino solicita; el origen aprueba
+    const p = ctx().principal!;   // solicita quien opera el origen o el destino; el origen aprueba y despacha
+    if (!p.can('inventory.transfer.write', d.toBranchId) && !p.can('inventory.transfer.write', d.fromBranchId)) throw forbidden({ permission: 'inventory.transfer.write' });
     return this.db.tx(async (q) => {
       const number = (await q.query(`SELECT next_counter('transfer') AS n`)).rows[0].n;
       const id = (await q.query(`INSERT INTO stock_transfers (tenant_id, number, from_branch_id, to_branch_id, notes, requested_by)

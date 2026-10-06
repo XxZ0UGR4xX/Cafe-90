@@ -78,7 +78,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
       (has(p, 'inventory.', 'purchasing.') && p !== 'inventory.transfer.approve' && p !== 'purchasing.order.approve') ||
       p === 'catalog.product.read' || p === 'reports.inventory.read' || p === 'notifications.read',
   ),
-  REPARTIDOR: ['delivery.order.read', 'delivery.order.own', 'notifications.read'],
+  REPARTIDOR: ['delivery.order.own', 'notifications.read'],
 };
 
 // Garantía de diseño: roles operativos nunca ven costos/utilidad.

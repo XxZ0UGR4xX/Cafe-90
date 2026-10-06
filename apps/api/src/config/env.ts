@@ -14,6 +14,8 @@ const schema = z.object({
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
   LOG_LEVEL: z.string().default('info'),
   RATE_LIMIT_MAX: z.coerce.number().default(300),
+  JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
+  PUBLIC_RATE_LIMIT_MAX: z.coerce.number().default(30),
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().default(10),
 });
 
