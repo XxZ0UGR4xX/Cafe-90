@@ -22,4 +22,9 @@ export class PrincipalRepository {
       return Principal.build(userId, tenantId, rows[0].full_name, rows.filter((r) => r.role_key));
     }, tenantId);
   }
+
+  /** Ids de todas las sucursales activas del tenant (para sockets corporativos). */
+  async branchIds(tenantId: string): Promise<string[]> {
+    return this.db.tx(async (q) => (await q.query('SELECT id FROM branches WHERE deleted_at IS NULL')).rows.map((r) => r.id), tenantId);
+  }
 }

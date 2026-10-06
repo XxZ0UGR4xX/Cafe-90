@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { IdentityController } from './identity.controller';
 import { PrincipalRepository } from './principal.repository';
 import { RolesService } from './roles.service';
+import { SupervisorService } from './supervisor.service';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
@@ -13,9 +14,9 @@ import { UsersService } from './users.service';
 @Module({
   controllers: [AuthController, IdentityController],
   providers: [
-    AuthService, UsersService, UsersRepository, RolesService, PrincipalRepository, LoginRateLimitGuard,
+    AuthService, UsersService, UsersRepository, RolesService, PrincipalRepository, SupervisorService, LoginRateLimitGuard,
     { provide: APP_GUARD, useClass: AccessGuard },
   ],
-  exports: [PrincipalRepository],
+  exports: [PrincipalRepository, SupervisorService],
 })
 export class IdentityModule {}

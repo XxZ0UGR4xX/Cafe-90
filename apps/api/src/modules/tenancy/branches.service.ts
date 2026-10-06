@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DbService } from '../../database/db.service';
 import { conflict, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
+import { DomainEvents } from '../../common/domain-events';
 import { AuditService } from '../audit/audit.service';
 
 const COLS = `id, name, code, address, phone, status, timezone, opening_hours AS "openingHours",
@@ -9,7 +10,7 @@ const COLS = `id, name, code, address, phone, status, timezone, opening_hours AS
 
 @Injectable()
 export class BranchesService {
-  constructor(private readonly db: DbService, private readonly audit: AuditService) {}
+  constructor(private readonly db: DbService, private readonly audit: AuditService, private readonly events: DomainEvents) {}
 
   list() {
     const scope = ctx().principal!.branchScope('tenancy.branch.read');
@@ -32,6 +33,7 @@ export class BranchesService {
         [dto.name, dto.code, dto.address ?? null, dto.phone ?? null, dto.status, dto.timezone])
       ).rows[0];
       await this.audit.record(q, { action: 'branch.create', entity: 'branch', entityId: row.id, branchId: row.id, newValue: row });
+      await this.events.emit(q, { type: 'BranchCreated', branchId: row.id, payload: { branchId: row.id } });
       return row;
     }).catch((e) => { if (e.code === '23505') throw conflict({ field: 'code' }, '⚠️ Ya existe una sucursal con ese código.'); throw e; });
   }

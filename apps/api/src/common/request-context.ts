@@ -11,6 +11,8 @@ export interface RequestContext {
   principal?: Principal;
   /** Cliente de BD con transacción abierta y `app.tenant_id` fijado. */
   tx?: PoolClient;
+  /** Callbacks que se ejecutan SOLO después del COMMIT de la transacción externa (p. ej. publicar eventos en tiempo real). */
+  afterCommit?: Array<() => void>;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();
