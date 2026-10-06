@@ -3,14 +3,14 @@ import { Tx } from '../../database/db.service';
 
 export interface UserRow {
   id: string; email: string; user_code: string | null; full_name: string; status: string;
-  last_login_at: Date | null; created_at: Date; roles: { role: string; branchId: string | null }[];
+  last_login_at: Date | null; created_at: Date; mfa_enabled: boolean; roles: { role: string; branchId: string | null }[];
 }
 
 @Injectable()
 export class UsersRepository {
   async list(q: Tx, branchScope: string[] | null, limit: number, offset: number): Promise<UserRow[]> {
     return (await q.query<UserRow>(
-      `SELECT u.id, u.email, u.user_code, u.full_name, u.status, u.last_login_at, u.created_at,
+      `SELECT u.id, u.email, u.user_code, u.full_name, u.status, u.last_login_at, u.created_at, (u.mfa_enabled_at IS NOT NULL) AS mfa_enabled,
               COALESCE(json_agg(json_build_object('role', r.key, 'branchId', ur.branch_id)) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles
          FROM users u
          LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -22,7 +22,7 @@ export class UsersRepository {
 
   async get(q: Tx, id: string): Promise<UserRow | undefined> {
     return (await q.query<UserRow>(
-      `SELECT u.id, u.email, u.user_code, u.full_name, u.status, u.last_login_at, u.created_at,
+      `SELECT u.id, u.email, u.user_code, u.full_name, u.status, u.last_login_at, u.created_at, (u.mfa_enabled_at IS NOT NULL) AS mfa_enabled,
               COALESCE(json_agg(json_build_object('role', r.key, 'branchId', ur.branch_id)) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles
          FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
         WHERE u.id = $1 AND u.deleted_at IS NULL GROUP BY u.id`, [id])).rows[0];

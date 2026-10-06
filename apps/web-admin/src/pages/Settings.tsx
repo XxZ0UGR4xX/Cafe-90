@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RetroBadge, RetroButton, RetroCard, RetroCheck, RetroInput, RetroSelect, RetroTable, RetroTabs } from '@retroburger/ui';
+import { RetroBadge, RetroButton, RetroCard, RetroCheck, RetroInput, RetroModal, RetroSelect, RetroTable, RetroTabs } from '@retroburger/ui';
 import { STATION_KEYS } from '@retroburger/shared';
 import { patch, post, put } from '../app/api';
 import { useAct, useBranchId, useGet } from '../app/hooks';
@@ -8,18 +8,44 @@ import { useArcade } from '../app/idle';
 import { useSound, play } from '../app/sound';
 import { syncNow, useConnection } from '../offline/connection';
 import { Async, FormModal, Row, fmtDate, num } from './common';
+import { CodeInput, MfaQr, RecoveryCodes } from '../app/MfaEnroll';
 
-type Tab = 'general' | 'branches' | 'taxes' | 'policies' | 'kitchen' | 'printers' | 'device' | 'sync' | 'integrations';
+type Tab = 'general' | 'security' | 'branches' | 'taxes' | 'policies' | 'kitchen' | 'printers' | 'device' | 'sync' | 'integrations';
 export default function Settings() {
   const { can } = useSession(); const [tab, setTab] = useState<Tab>('general');
-  const tabs: { key: Tab; label: string }[] = [{ key: 'general', label: '🏢 Restaurante' }, ...(can('tenancy.branch.read') ? [{ key: 'branches' as Tab, label: '🏪 Sucursales' }] : []), { key: 'taxes', label: '🧮 Impuestos y pagos' }, ...(can('tenancy.settings.read') ? [{ key: 'policies' as Tab, label: '📐 Reglas y políticas' }] : []), { key: 'kitchen', label: '👨‍🍳 Cocina' }, ...(can('printing.manage') ? [{ key: 'printers' as Tab, label: '🖨️ Impresoras' }] : []), { key: 'device', label: '🕹️ Este dispositivo' }, { key: 'sync', label: '📡 Sincronización' }, { key: 'integrations', label: '🔌 Integraciones' }];
+  const tabs: { key: Tab; label: string }[] = [{ key: 'general', label: '🏢 Restaurante' }, ...(can('tenancy.branch.read') ? [{ key: 'branches' as Tab, label: '🏪 Sucursales' }] : []), { key: 'taxes', label: '🧮 Impuestos y pagos' }, ...(can('tenancy.settings.read') ? [{ key: 'policies' as Tab, label: '📐 Reglas y políticas' }] : []), { key: 'kitchen', label: '👨‍🍳 Cocina' }, ...(can('printing.manage') ? [{ key: 'printers' as Tab, label: '🖨️ Impresoras' }] : []), { key: 'security', label: '🔐 Seguridad' }, { key: 'device', label: '🕹️ Este dispositivo' }, { key: 'sync', label: '📡 Sincronización' }, { key: 'integrations', label: '🔌 Integraciones' }];
   return <><RetroTabs value={tab} onChange={setTab} tabs={tabs} />
-    {tab === 'general' && <General />}{tab === 'branches' && <Branches />}{tab === 'taxes' && <Taxes />}{tab === 'policies' && <Policies />}{tab === 'kitchen' && <Kitchen />}{tab === 'printers' && <Printers />}{tab === 'device' && <Device />}{tab === 'sync' && <Sync />}{tab === 'integrations' && <Integrations />}</>;
+    {tab === 'general' && <General />}{tab === 'branches' && <Branches />}{tab === 'taxes' && <Taxes />}{tab === 'policies' && <Policies />}{tab === 'kitchen' && <Kitchen />}{tab === 'printers' && <Printers />}{tab === 'security' && <Security />}{tab === 'device' && <Device />}{tab === 'sync' && <Sync />}{tab === 'integrations' && <Integrations />}</>;
 }
 
 function General() {
   const me = useSession((s) => s.me)!;
   return <RetroCard title="🏢 Restaurante"><div className="rb-grid rb-grid-2">{[['Nombre', me.tenant.name], ['Identificador (slug)', me.tenant.slug], ['Moneda', me.tenant.currency], ['Idioma', me.tenant.locale], ['Zona horaria', me.tenant.timezone]].map(([l, v]) => <div key={String(l)}><div className="rb-label">{l}</div><strong>{v}</strong></div>)}</div><p className="rb-hint">Los datos de cada restaurante están completamente aislados (multi-tenant). Los horarios de operación se configuran por sucursal.</p></RetroCard>;
+}
+
+function Security() {
+  const me = useSession((s) => s.me)!; const refreshMe = useSession((s) => s.refreshMe);
+  const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null); const [code, setCode] = useState('');
+  const [off, setOff] = useState<{ password: string; code: string } | null>(null);
+  const start = useAct(() => post('/auth/2fa/setup'), { onSuccess: (r) => { setSetup(r); setCode(''); } });
+  const enable = useAct(() => post('/auth/2fa/enable', { code }), { onSuccess: (r) => { setSetup(null); setCodes(r.recoveryCodes); } });
+  const disable = useAct(() => post('/auth/2fa/disable', { password: off!.password, code: off!.code.trim() }), { ok: 'Verificación en dos pasos desactivada', onSuccess: () => { setOff(null); void refreshMe(); } });
+  const { enabled, required } = me.mfa;
+  return <><RetroCard title="🔐 Verificación en dos pasos (2FA)" tone={enabled ? 'plain' : 'red'}>
+    <div className="rb-row rb-wrap"><RetroBadge tone={enabled ? 'ok' : 'warn'}>{enabled ? '🔐 Activa' : '🔓 Desactivada'}</RetroBadge>{required && <RetroBadge tone="info">Obligatoria para tu rol</RetroBadge>}</div>
+    <p className="rb-hint">Además de tu contraseña se pide un código de 6 dígitos de tu app de autenticación (Google Authenticator, Authy, 1Password…). Protege las cuentas con acceso a toda la operación y al dinero.</p>
+    {!enabled && <RetroButton variant="neon" loading={start.isPending} onClick={() => start.mutate()}>Activar 2FA</RetroButton>}
+    {enabled && !required && <RetroButton variant="white" onClick={() => setOff({ password: '', code: '' })}>Desactivar 2FA</RetroButton>}
+    {enabled && required && <p className="rb-hint">Tu rol exige 2FA; no se puede desactivar. Si pierdes el teléfono, pide a otro administrador que reinicie tu 2FA o usa un código de recuperación.</p>}
+  </RetroCard>
+    <FormModal open={!!setup} onClose={() => setSetup(null)} title="Activar verificación en dos pasos" busy={enable.isPending} disabled={code.length !== 6} submitLabel="Activar" onSubmit={() => enable.mutate()}>{setup && <>
+      <p className="rb-hint" style={{ margin: 0 }}>1. Escanea el QR con tu app de autenticación. 2. Escribe el código de 6 dígitos que muestra.</p>
+      <MfaQr uri={setup.otpauthUri} secret={setup.secret} /><CodeInput value={code} onChange={setCode} /></>}</FormModal>
+    <RetroModal open={!!codes} onClose={() => { /* se cierra sólo al confirmar que guardó los códigos */ }} title="2FA activado" size="sm" dismissible={false}>{codes && <RecoveryCodes codes={codes} onDone={() => { setCodes(null); void refreshMe(); }} />}</RetroModal>
+    <FormModal open={!!off} onClose={() => setOff(null)} title="Desactivar 2FA" size="sm" busy={disable.isPending} disabled={!off?.password || (off?.code.length ?? 0) < 6} submitLabel="Desactivar" onSubmit={() => disable.mutate()}>{off && <>
+      <RetroInput label="Contraseña" type="password" autoComplete="current-password" value={off.password} onChange={(e) => setOff({ ...off, password: e.target.value })} />
+      <RetroInput label="Código de 6 dígitos (o de recuperación)" value={off.code} onChange={(e) => setOff({ ...off, code: e.target.value })} autoComplete="one-time-code" /></>}</FormModal></>;
 }
 
 function Branches() {

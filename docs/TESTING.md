@@ -10,3 +10,6 @@
 
 Las pruebas de API usan la base `retroburger_test` (creada por `scripts/setup-local-db.sh`); migran automáticamente al iniciar.
 Para E2E: levantar API (`pnpm dev:api`), `pnpm dev:web`, `pnpm --filter @retroburger/web-public dev`, tener el seed cargado y ejecutar `npx playwright test` en `e2e/` (usa el Chromium preinstalado: `CHROMIUM_PATH`).
+
+## 2FA
+`apps/api/test/mfa.test.ts` cubre: vectores RFC 6238, ventana ±1 y anti-replay, cifrado AES-GCM, flujo login→reto→sesión, códigos de recuperación de un solo uso, bloqueo tras 5 fallos (la contraseña correcta no reinicia el contador), PIN que no evita el 2FA, secreto ausente de auditoría, enrolamiento obligatorio con `MFA_ENFORCE`, reinicio por administrador y jerarquía de privilegios. E2E de navegador: `e2e/tests/mfa.spec.ts` (crea un usuario descartable; no altera la cuenta demo).

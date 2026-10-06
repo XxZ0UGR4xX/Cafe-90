@@ -14,6 +14,11 @@ export const PinLoginDto = z.object({
   userCode: z.string().min(1).max(40),
   pin: z.string().regex(/^\d{4,6}$/),
 });
+export const MfaVerifyDto = z.object({ mfaToken: z.string().min(20).max(2000), code: z.string().min(6).max(20) });
+export const MfaEnrollStartDto = z.object({ mfaToken: z.string().min(20).max(2000) });
+export const MfaEnrollFinishDto = z.object({ mfaToken: z.string().min(20).max(2000), code: z.string().regex(/^\d{6}$/) });
+export const MfaCodeDto = z.object({ code: z.string().regex(/^\d{6}$/) });
+export const MfaDisableDto = z.object({ password: z.string().min(1).max(200), code: z.string().min(6).max(20) });
 export const ChangePasswordDto = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(10).max(200),

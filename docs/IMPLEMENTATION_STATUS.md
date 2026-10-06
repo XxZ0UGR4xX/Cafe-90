@@ -16,7 +16,7 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Módulo | Estado | Notas |
 |---|---|---|
 | Multi-tenant (RLS), sucursales | ✅ | RLS forzada + prueba automática sobre todas las tablas |
-| Auth (login, refresh, PIN) / RBAC / auditoría | ✅ | 🟡 **2FA TOTP** definido para ADMIN/SUPER_ADMIN pero no implementado |
+| Auth (login, refresh, PIN) / RBAC / auditoría | ✅ | **2FA TOTP** (RFC 6238, sin dependencias): reto en login, enrolamiento con QR, 10 códigos de recuperación de un solo uso, anti-replay, secreto cifrado AES-256-GCM, bloqueo por intentos, reinicio por administrador. Obligatorio para ADMIN/SUPER_ADMIN con `MFA_ENFORCE=true`; el PIN rápido nunca evita el 2FA. Jerarquía de privilegios al administrar usuarios (un gerente no edita a un ADMIN ni a otra sucursal) |
 | Catálogo, variantes, modificadores, combos, recetas, costos | ✅ | |
 | Inventario (kardex, lotes FEFO, mermas, ajustes, conteo físico, transferencias, alertas) | ✅ | conciliación kardex↔saldo probada; falta job de conciliación nocturna |
 | Compras (proveedores, cotización, OC, aprobación, recepción parcial, factura con cotejo) | ✅ | cuentas por pagar básico |
@@ -37,4 +37,4 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | CI/CD, Docker | 🟡 | workflow y compose básicos incluidos; sin despliegue |
 
 ## Seguridad pendiente antes de producción
-2FA TOTP, Redis para rate-limit/sesiones distribuidas, rotación de secretos, CSP/headers del frontend servidos por el proxy, escaneo de dependencias en CI, backups cifrados y prueba de restauración, pentest.
+**Activar `MFA_ENFORCE=true` y definir `MFA_ENCRYPTION_KEY` (obligatoria en producción)**; rotación de la clave MFA (hoy no hay re-cifrado), Redis para rate-limit/sesiones distribuidas, rotación de secretos, CSP/headers del frontend servidos por el proxy, escaneo de dependencias en CI, backups cifrados y prueba de restauración, pentest.

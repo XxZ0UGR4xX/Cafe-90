@@ -48,12 +48,25 @@ export class UsersService {
     return out;
   }
 
-  private async assertCanManage(q: Tx, id: string) {
+  /**
+   * Sólo se administra a quien se está por debajo: el actor debe poseer TODOS los permisos de cada rol del objetivo,
+   * en cada sucursal donde lo tiene (un rol corporativo del objetivo exige alcance corporativo). Evita que un gerente
+   * edite, desbloquee o cambie la contraseña de un ADMIN o de personal de otra sucursal.
+   */
+  async assertCanManage(q: Tx, id: string) {
     const target = await this.repo.get(q, id);
     if (!target) throw notFound('user');
     const actor = ctx().principal!;
     if (target.roles.some((r) => r.role === 'SUPER_ADMIN') && !actor.grants.some((g) => g.roleKey === 'SUPER_ADMIN'))
       throw forbidden({ reason: 'no puedes modificar a un SUPER_ADMIN' });
+    if (id === actor.userId) return target;
+    for (const r of target.roles) {
+      if (r.branchId === null && !actor.isCorporate) throw forbidden({ reason: 'el usuario tiene alcance corporativo' });
+      const role = await this.repo.roleByKey(q, r.role);
+      if (!role) continue;
+      const missing = (await this.repo.rolePermissions(q, role.id)).filter((p) => !actor.can(p, r.branchId ?? undefined));
+      if (missing.length) throw forbidden({ reason: 'el usuario tiene más privilegios que tú o está fuera de tu alcance', missing: missing.slice(0, 3) });
+    }
     return target;
   }
 

@@ -7,7 +7,8 @@ import { ctx } from '../../common/request-context';
 import { AuditService } from '../audit/audit.service';
 import { PrincipalRepository } from './principal.repository';
 import { hashSecret, verifySecret } from './passwords';
-import { hashToken, newOpaqueToken, signAccess } from './tokens';
+import { MFA_REQUIRED_ROLES } from '@retroburger/shared';
+import { hashToken, newOpaqueToken, signAccess, signMfa } from './tokens';
 
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
@@ -16,6 +17,11 @@ const REUSE_GRACE_MS = 10_000;
 let DUMMY: string | undefined;
 
 export interface Session { accessToken: string; expiresIn: number; refreshToken: string; refreshExpiresAt: Date }
+/** Resultado de un login: sesión completa o paso intermedio de 2FA (verificar código / enrolar). */
+export type LoginResult =
+  | { kind: 'session'; session: Session }
+  | { kind: 'mfa'; mfaToken: string }
+  | { kind: 'enroll'; mfaToken: string };
 
 @Injectable()
 export class AuthService {
@@ -31,15 +37,17 @@ export class AuthService {
     return rows[0]?.t ?? null;
   }
 
-  async login(dto: { tenant: string; email: string; password: string }): Promise<Session> {
+  async login(dto: { tenant: string; email: string; password: string }): Promise<LoginResult> {
     return this.authenticate(dto.tenant, 'email', dto.email.toLowerCase(), dto.password, 'auth.login');
   }
 
   async pinLogin(dto: { tenant: string; userCode: string; pin: string }): Promise<Session> {
-    return this.authenticate(dto.tenant, 'pin', dto.userCode, dto.pin, 'auth.pin_login');
+    const r = await this.authenticate(dto.tenant, 'pin', dto.userCode, dto.pin, 'auth.pin_login');
+    if (r.kind !== 'session') throw new AppError('MFA_REQUIRED', 403);
+    return r.session;
   }
 
-  private async authenticate(slug: string, mode: 'email' | 'pin', ident: string, secret: string, action: string) {
+  private async authenticate(slug: string, mode: 'email' | 'pin', ident: string, secret: string, action: string): Promise<LoginResult> {
     DUMMY ??= await hashSecret('dummy-password-for-timing');
     const tenantId = await this.resolveTenant(slug);
     if (!tenantId) { await verifySecret(DUMMY, secret); throw new AppError('INVALID_CREDENTIALS', 401); }
@@ -47,7 +55,7 @@ export class AuthService {
     const outcome = await this.db.tx(async (q) => {
       const col = mode === 'email' ? 'lower(email)' : 'user_code';
       const { rows } = await q.query(
-        `SELECT id, password_hash, pin_hash, status, failed_attempts, locked_until FROM users
+        `SELECT id, password_hash, pin_hash, status, failed_attempts, locked_until, mfa_enabled_at FROM users
           WHERE ${col} = $1 AND deleted_at IS NULL FOR UPDATE`, [ident]);
       const u = rows[0];
       const hash = u ? (mode === 'email' ? u.password_hash : u.pin_hash) : null;
@@ -68,17 +76,43 @@ export class AuthService {
           newValue: { attempts, locked: lock } });
         return { fail: (lock ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS') as 'ACCOUNT_LOCKED' | 'INVALID_CREDENTIALS' };
       }
+      // 2FA: con la contraseña correcta aún NO se reinician los intentos (los códigos fallidos cuentan para el bloqueo).
+      const mfaStep = await this.mfaStepFor(q, u.id, !!u.mfa_enabled_at);
+      if (mfaStep) {
+        await this.audit.record(q, { action: `${action}_mfa_pending`, entity: 'user', entityId: u.id, userId: u.id, newValue: { step: mfaStep } });
+        return { mfa: mfaStep, userId: u.id as string } as const;
+      }
       await q.query('UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [u.id]);
-      const session = await this.issue(q, u.id, tenantId, randomUUID());
+      const session = await this.issueSession(q, u.id, tenantId, randomUUID());
       await this.audit.record(q, { action, entity: 'user', entityId: u.id, userId: u.id });
       return { session };
     }, tenantId);
 
     if ('fail' in outcome) throw new AppError(outcome.fail!, outcome.fail === 'ACCOUNT_LOCKED' ? 423 : 401);
-    return outcome.session!;
+    if ('mfa' in outcome) {
+      // PIN rápido nunca puede saltarse el 2FA: se rechaza (la UI de PIN es para personal de piso).
+      if (mode === 'pin') throw new AppError('MFA_REQUIRED', 403);
+      const mfaToken = await signMfa({ sub: outcome.userId!, tid: tenantId, purpose: outcome.mfa! }, this.env.JWT_ACCESS_SECRET);
+      return { kind: outcome.mfa === 'challenge' ? 'mfa' : 'enroll', mfaToken };
+    }
+    return { kind: 'session', session: outcome.session! };
   }
 
-  private async issue(q: Tx, userId: string, tenantId: string, familyId: string): Promise<Session> {
+  /** 'challenge' si ya tiene 2FA; 'enroll' si el rol lo exige (y MFA_ENFORCE está activo) y aún no lo tiene; null si no aplica. */
+  private async mfaStepFor(q: Tx, userId: string, enabled: boolean): Promise<'challenge' | 'enroll' | null> {
+    if (enabled) return 'challenge';
+    if (this.env.MFA_ENFORCE !== 'true') return null;
+    return (await this.hasMfaRequiredRole(q, userId)) ? 'enroll' : null;
+  }
+
+  async hasMfaRequiredRole(q: Tx, userId: string): Promise<boolean> {
+    const { rows } = await q.query(
+      `SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1 AND r.key = ANY($2::text[]) LIMIT 1`,
+      [userId, MFA_REQUIRED_ROLES]);
+    return rows.length > 0;
+  }
+
+  async issueSession(q: Tx, userId: string, tenantId: string, familyId: string): Promise<Session> {
     const refresh = newOpaqueToken();
     const expires = new Date(Date.now() + this.env.REFRESH_TTL_DAYS * 86_400_000);
     const c = ctx();
@@ -113,7 +147,7 @@ export class AuthService {
         return { fail: true };
       }
       await q.query('UPDATE refresh_tokens SET used_at = now() WHERE id = $1', [r.id]);
-      return { session: await this.issue(q, r.user_id, tenantId, r.family_id) };
+      return { session: await this.issueSession(q, r.user_id, tenantId, r.family_id) };
     }, tenantId);
     if (!out.session) throw unauthenticated();
     return out.session;
@@ -146,12 +180,13 @@ export class AuthService {
   async me() {
     const p = ctx().principal!;
     const row = await this.db.tx(async (q) => (await q.query(
-      `SELECT u.id, u.email, u.full_name, r.name AS tenant_name, r.currency, r.locale, r.timezone, r.slug
+      `SELECT u.id, u.email, u.full_name, u.mfa_enabled_at, r.name AS tenant_name, r.currency, r.locale, r.timezone, r.slug
          FROM users u JOIN restaurants r ON r.id = u.tenant_id WHERE u.id = $1`, [p.userId])).rows[0]);
     const scope = p.branchScope('tenancy.branch.read');
     return {
       id: row.id, email: row.email, fullName: row.full_name,
       tenant: { id: p.tenantId, slug: row.slug, name: row.tenant_name, currency: row.currency.trim(), locale: row.locale, timezone: row.timezone },
+      mfa: { enabled: row.mfa_enabled_at != null, required: this.env.MFA_ENFORCE === 'true' && p.grants.some((g) => (MFA_REQUIRED_ROLES as string[]).includes(g.roleKey)) },
       roles: p.grants, permissions: p.permissionList(), branchScope: scope, isCorporate: p.isCorporate,
     };
   }

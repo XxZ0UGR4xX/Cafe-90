@@ -3,6 +3,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_ERROR: '⚠️ Algunos datos no son válidos. Revísalos e inténtalo nuevamente.',
   UNAUTHENTICATED: '🔒 Tu sesión expiró. Inicia sesión nuevamente.',
   INVALID_CREDENTIALS: '🔒 Correo, PIN o contraseña incorrectos.',
+  MFA_INVALID: '🔒 Código de verificación incorrecto o vencido.',
+  MFA_REQUIRED: '🔐 Esta cuenta requiere verificación en dos pasos. Inicia sesión con correo y contraseña.',
   ACCOUNT_LOCKED: '🔒 Cuenta bloqueada temporalmente por demasiados intentos. Inténtalo más tarde.',
   FORBIDDEN: '⛔ No tienes permiso para realizar esta acción.',
   NOT_FOUND: '🔍 No encontramos lo que buscas.',

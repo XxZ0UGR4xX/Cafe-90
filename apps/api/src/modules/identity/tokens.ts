@@ -22,3 +22,23 @@ export async function verifyAccess(token: string, secret: string): Promise<Acces
 
 export const newOpaqueToken = (): string => randomBytes(32).toString('base64url');
 export const hashToken = (t: string): string => createHash('sha256').update(t).digest('hex');
+
+/**
+ * Token efímero del paso intermedio de 2FA. Emisor y clave distintos a los del access token:
+ * no sirve como Bearer (verifyAccess lo rechaza por emisor) y sólo vale para los endpoints /auth/2fa/*.
+ */
+export type MfaPurpose = 'challenge' | 'enroll';
+const MFA_ISSUER = 'retroburger-mfa';
+const mfaKey = (secret: string) => enc(`${secret}:mfa-step`);
+
+export async function signMfa(c: { sub: string; tid: string; purpose: MfaPurpose }, secret: string, ttlSeconds = 300): Promise<string> {
+  return new SignJWT({ tid: c.tid, purpose: c.purpose })
+    .setProtectedHeader({ alg: 'HS256' }).setSubject(c.sub).setIssuedAt()
+    .setExpirationTime(`${ttlSeconds}s`).setIssuer(MFA_ISSUER).sign(mfaKey(secret));
+}
+
+export async function verifyMfa(token: string, secret: string, purpose: MfaPurpose): Promise<{ sub: string; tid: string }> {
+  const { payload } = await jwtVerify(token, mfaKey(secret), { issuer: MFA_ISSUER, algorithms: ['HS256'] });
+  if (payload.purpose !== purpose) throw new Error('propósito de token inválido');
+  return { sub: String(payload.sub), tid: String(payload.tid) };
+}

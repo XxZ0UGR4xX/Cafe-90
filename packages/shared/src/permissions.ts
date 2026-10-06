@@ -94,7 +94,7 @@ for (const r of ['CAJERO', 'MESERO', 'COCINERO', 'REPARTIDOR'] as RoleKey[]) {
 /** Roles con alcance corporativo (todas las sucursales por defecto). */
 export const CORPORATE_ROLES: RoleKey[] = ['SUPER_ADMIN', 'ADMIN'];
 
-/** Roles que requieren 2FA TOTP (documentado; activación en fase de hardening). */
+/** Roles que requieren 2FA TOTP cuando MFA_ENFORCE=true (se enrola al iniciar sesión; ver MfaService). */
 export const MFA_REQUIRED_ROLES: RoleKey[] = ['SUPER_ADMIN', 'ADMIN'];
 
 export const ROLE_LABELS: Record<RoleKey, string> = {

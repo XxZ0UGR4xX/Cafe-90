@@ -17,6 +17,14 @@ const schema = z.object({
   JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
   PUBLIC_RATE_LIMIT_MAX: z.coerce.number().default(30),
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().default(10),
+  /** Clave para cifrar secretos TOTP en reposo. Obligatoria en producción. */
+  MFA_ENCRYPTION_KEY: z.string().min(32, 'MFA_ENCRYPTION_KEY debe tener al menos 32 caracteres').optional(),
+  /** Si es 'true', SUPER_ADMIN/ADMIN deben enrolar 2FA para poder iniciar sesión. */
+  MFA_ENFORCE: z.enum(['true', 'false']).default('false'),
+  MFA_ISSUER: z.string().default('RetroBurger'),
+}).superRefine((v, ctx) => {
+  if (v.NODE_ENV === 'production' && !v.MFA_ENCRYPTION_KEY)
+    ctx.addIssue({ code: 'custom', path: ['MFA_ENCRYPTION_KEY'], message: 'es obligatoria en producción' });
 });
 
 export type Env = z.infer<typeof schema>;
