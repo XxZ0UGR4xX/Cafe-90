@@ -6,3 +6,4 @@ export * from './schemas';
 export * from './catalog';
 export * from './sales';
 export * from './ops';
+export * from './fiscal';

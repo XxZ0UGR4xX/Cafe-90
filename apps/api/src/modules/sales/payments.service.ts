@@ -76,6 +76,7 @@ export class PaymentsService {
   async refund(orderId: string, d: { amount?: number; method: string; reason: string; supervisor?: SupervisorInput }) {
     return this.db.tx(async (q) => {
       const o = await this.sales.lockOrder(q, orderId);
+      await this.sales.assertNotInvoiced(q, orderId);
       const authBy = await this.supervisor.authorize('sales.order.refund', o.branch_id, d.supervisor);
       if (o.paid_total <= 0) throw new AppError('VALIDATION_ERROR', 400, { message: 'La cuenta no tiene pagos que devolver' });
       const amount = r2(d.amount ?? o.paid_total);

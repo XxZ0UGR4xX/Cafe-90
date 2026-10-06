@@ -71,7 +71,7 @@ export async function seedDemo(log: (m: string) => void = console.log) {
 
   const branchIds: Record<string, string> = {};
   for (const b of BRANCHES) {
-    const br = await call('POST', '/branches', T, { name: b.name, code: b.code, address: b.address, phone: b.phone, status: 'OPEN', timezone: 'America/Mexico_City' });
+    const br = await call('POST', '/branches', T, { name: b.name, code: b.code, address: b.address, phone: b.phone, status: 'OPEN', timezone: 'America/Mexico_City', postalCode: '06600' });
     branchIds[b.code] = br.id;
     // mesas 1..10 en cuadrícula 5×2
     for (let n = 1; n <= 10; n++)
@@ -92,6 +92,9 @@ export async function seedDemo(log: (m: string) => void = console.log) {
   }
 
   for (const [name, phone, email] of CUSTOMERS) await call('POST', '/customers', T, { name, phone, email, marketingConsent: true }).catch(() => undefined);
+
+  // Facturación: RFC de pruebas públicos del SAT + proveedor simulado (sin validez fiscal)
+  await call('PUT', '/fiscal/profile', T, { rfc: 'EKU9003173C9', legalName: 'Escuela Kemper Urgate', regimenFiscal: '601', postalCode: '06600', series: 'A', enabled: true }).catch(() => undefined);
 
   const tenantId = (await db.system('SELECT resolve_tenant($1) AS t', ['retroburger'])).rows[0].t as string;
   if (process.env.SEED_HISTORY !== 'false') await seedHistory(db, tenantId, 21, log);

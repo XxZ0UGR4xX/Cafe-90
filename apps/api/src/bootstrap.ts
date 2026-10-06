@@ -44,6 +44,7 @@ export async function createApp(): Promise<NestFastifyApplication> {
   await app.register(fastifyCors as any, {
     origin: env.CORS_ORIGINS.split(',').map((s) => s.trim()),
     credentials: true,
+    exposedHeaders: ['content-disposition'],   // nombre del archivo en descargas (XML de CFDI)
     allowedHeaders: ['content-type', 'authorization', 'x-requested-with', 'x-branch-id', 'idempotency-key', 'x-request-id'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });

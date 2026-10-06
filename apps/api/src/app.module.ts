@@ -24,13 +24,14 @@ import { StaffModule } from './modules/staff/staff.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { PublicModule } from './modules/public/public.module';
 import { HealthController } from './modules/health/health.controller';
 import { IdentityModule } from './modules/identity/identity.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 
 @Module({
-  imports: [DbModule, EventsModule, AuditModule, IdentityModule, TenancyModule, CatalogModule, NotificationsModule, InventoryModule, PurchasingModule, CashModule, FloorModule, SalesModule, KitchenModule, RealtimeModule, CrmModule, PromotionsModule, LoyaltyModule, ReservationsModule, DeliveryModule, PrintingModule, StaffModule, SyncModule, ReportsModule, PublicModule, JobsModule],
+  imports: [DbModule, EventsModule, AuditModule, IdentityModule, TenancyModule, CatalogModule, NotificationsModule, InventoryModule, PurchasingModule, CashModule, FloorModule, SalesModule, KitchenModule, RealtimeModule, CrmModule, PromotionsModule, LoyaltyModule, ReservationsModule, DeliveryModule, PrintingModule, StaffModule, SyncModule, ReportsModule, FiscalModule, PublicModule, JobsModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },

@@ -16,7 +16,7 @@ import { SettingsService } from '../tenancy/settings.service';
 import { DomainEvents } from '../../common/domain-events';
 
 type Dict = Record<string, any>;
-const PUBLIC_PERMS = ['sales.order.create', 'sales.order.update', 'sales.order.read', 'sales.order.readAll', 'floor.table.operate', 'catalog.product.read', 'delivery.order.write', 'floor.reservation.write', 'floor.reservation.read'];
+const PUBLIC_PERMS = ['sales.order.create', 'sales.order.update', 'sales.order.read', 'sales.order.readAll', 'floor.table.operate', 'catalog.product.read', 'delivery.order.write', 'floor.reservation.write', 'floor.reservation.read', 'fiscal.invoice.issue'];
 
 /**
  * Superficie pública (clientes): menú, pedidos para llevar/domicilio, reservaciones, QR de mesa y puntos.

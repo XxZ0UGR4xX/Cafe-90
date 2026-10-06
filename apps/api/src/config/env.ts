@@ -22,9 +22,15 @@ const schema = z.object({
   /** Si es 'true', SUPER_ADMIN/ADMIN deben enrolar 2FA para poder iniciar sesión. */
   MFA_ENFORCE: z.enum(['true', 'false']).default('false'),
   MFA_ISSUER: z.string().default('RetroBurger'),
+  /** Proveedor de timbrado CFDI. 'sandbox' = simulado (sin validez fiscal). Por defecto: sandbox en desarrollo/pruebas, none en producción. */
+  FISCAL_PROVIDER: z.enum(['sandbox', 'none']).optional(),
+  /** URL pública del sitio de clientes (se imprime en el ticket para autofacturación). */
+  PUBLIC_WEB_URL: z.string().url().default('http://localhost:5174'),
 }).superRefine((v, ctx) => {
   if (v.NODE_ENV === 'production' && !v.MFA_ENCRYPTION_KEY)
     ctx.addIssue({ code: 'custom', path: ['MFA_ENCRYPTION_KEY'], message: 'es obligatoria en producción' });
+  if (v.NODE_ENV === 'production' && v.FISCAL_PROVIDER === 'sandbox')
+    ctx.addIssue({ code: 'custom', path: ['FISCAL_PROVIDER'], message: "'sandbox' emite comprobantes SIN validez fiscal: no se permite en producción" });
 });
 
 export type Env = z.infer<typeof schema>;

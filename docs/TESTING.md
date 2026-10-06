@@ -13,3 +13,8 @@ Para E2E: levantar API (`pnpm dev:api`), `pnpm dev:web`, `pnpm --filter @retrobu
 
 ## 2FA
 `apps/api/test/mfa.test.ts` cubre: vectores RFC 6238, ventana ±1 y anti-replay, cifrado AES-GCM, flujo login→reto→sesión, códigos de recuperación de un solo uso, bloqueo tras 5 fallos (la contraseña correcta no reinicia el contador), PIN que no evita el 2FA, secreto ausente de auditoría, enrolamiento obligatorio con `MFA_ENFORCE`, reinicio por administrador y jerarquía de privilegios. E2E de navegador: `e2e/tests/mfa.spec.ts` (crea un usuario descartable; no altera la cuenta demo).
+
+## Facturación (CFDI 4.0)
+- `apps/api/src/modules/fiscal/fiscal.pure.test.ts`: catálogos SAT, normalización de nombre, aritmética (todos los montos 1¢–$600, 400 órdenes aleatorias con descuentos/tasas mixtas: total ±1¢ y traslados válidos), XML bien formado y escapado, factura global.
+- `apps/api/test/fiscal.test.ts` (BD real): emisión, duplicados, cancelación, inmutabilidad en BD, bloqueo de devolución con factura vigente, autofactura pública (código inválido, plazo, ya facturada, XML), factura global (reglas de día cerrado, no repetir, liberar al cancelar), permisos y aislamiento entre tenants.
+- E2E de navegador: `e2e/tests/invoice.spec.ts` (cobro → Facturar en Pedidos → timbre simulado, y autofactura en el sitio público).

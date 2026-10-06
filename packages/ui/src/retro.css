@@ -181,3 +181,11 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .rb-perf * { animation: none !important; transition: none !important; }
 @media print { .rb-sidebar, .rb-navbar, .rb-toasts { display: none !important; } .rb-app { display: block; } }
+
+/* Impresión: sólo el contenido marcado (p. ej. una factura abierta en un modal) */
+@media print {
+  body * { visibility: hidden !important; }
+  .rb-print-area, .rb-print-area * { visibility: visible !important; }
+  .rb-print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 16px; background: #fff; color: #000; }
+  .rb-print-area .rb-btn { display: none !important; }
+}

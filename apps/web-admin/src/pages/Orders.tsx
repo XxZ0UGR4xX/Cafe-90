@@ -6,6 +6,7 @@ import { useSession } from '../app/auth';
 import { useWithSupervisor } from '../app/supervisor';
 import { Async, NeedBranch, fmtDate, fmtTime } from './common';
 import { printReceipt } from './Pos';
+import { InvoiceDetail, InvoiceOrderDialog } from './fiscal/invoices';
 
 const FILTERS = { open: 'PENDING,CONFIRMED,PREPARING,READY,DELIVERED', done: 'COMPLETED', cancelled: 'CANCELLED', all: '' } as const;
 export default function Orders() { return <NeedBranch>{(b) => <OrdersInner branchId={b} />}</NeedBranch>; }
@@ -30,13 +31,18 @@ function OrdersInner({ branchId }: { branchId: string }) {
 
 export function OrderDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useGet<any>(['orders', 'one', id], `/orders/${id}`); const { can } = useSession(); const withSup = useWithSupervisor();
+  const [inv, setInv] = useState<null | 'new' | string>(null);
   const [mode, setMode] = useState<null | 'cancel' | 'refund'>(null); const [reason, setReason] = useState(''); const [method, setMethod] = useState('CASH');
   const o = q.data;
+  const canInvoice = !!o && o.paymentStatus === 'PAID' && o.status !== 'CANCELLED' && can('fiscal.invoice.issue', o.branchId);
+  const invs = useGet<any[]>(['invoices', 'order', id], '/invoices', { orderId: id }, { enabled: canInvoice });
+  const active = (invs.data ?? []).find((x) => ['STAMPED', 'PENDING', 'CANCEL_PENDING'].includes(x.status));
   const run = useAct(() => withSup((sup) => mode === 'cancel' ? post(`/orders/${id}/cancel`, { reason, supervisor: sup }) : post(`/orders/${id}/refund`, { method, reason, supervisor: sup })), { invalidate: [['orders'], ['tables']], ok: 'Listo', onSuccess: () => { setMode(null); setReason(''); } });
   const send = useAct(() => post(`/orders/${id}/send-to-kitchen`), { invalidate: [['orders'], ['kitchen']], ok: '🔥 Enviado a cocina' });
   return (
     <RetroModal open onClose={onClose} size="lg" title={o ? `Orden #${String(o.number).padStart(4, '0')}` : 'Orden'} footer={o && <>
       <RetroButton variant="white" onClick={() => void printReceipt(id)}>🖨️ Ticket</RetroButton>
+      {canInvoice && invs.data && (active ? <RetroButton variant="white" onClick={() => setInv(active.id)}>🧾 Factura {active.series}-{active.folio}</RetroButton> : <RetroButton variant="neon" onClick={() => setInv('new')}>🧾 Facturar</RetroButton>)}
       {o.status === 'PENDING' && can('sales.order.update', o.branchId) && <RetroButton variant="mustard" loading={send.isPending} onClick={() => send.mutate()}>🔥 Confirmar y enviar a cocina</RetroButton>}
       {!['CANCELLED', 'COMPLETED'].includes(o.status) && o.paidTotal === 0 && <RetroButton variant="ink" onClick={() => setMode('cancel')}>Cancelar orden</RetroButton>}
       {o.paidTotal > 0 && <RetroButton variant="ink" onClick={() => setMode('refund')}>Devolución</RetroButton>}</>}>
@@ -47,6 +53,8 @@ export function OrderDetail({ id, onClose }: { id: string; onClose: () => void }
         {o.payments.length > 0 && <RetroCard title="Pagos" tone="plain"><RetroTable rows={o.payments} columns={[{ key: 'k', header: 'Tipo', render: (p: any) => p.kind }, { key: 'm', header: 'Método', render: (p: any) => p.method }, { key: 'a', header: 'Monto', numeric: true, render: (p: any) => formatMoney2(p.amount) }, { key: 'at', header: 'Hora', render: (p: any) => fmtTime(p.at) }]} /></RetroCard>}
         {o.cancelReason && <div className="rb-error-text">Motivo de cancelación: {o.cancelReason}</div>}
       </div>}</Async>
+      {inv === 'new' && o && <InvoiceOrderDialog order={{ id, number: o.number, total: o.total, customerId: o.customerId, customerName: o.customerName }} onClose={() => setInv(null)} onDone={(i) => setInv(i)} />}
+      {inv && inv !== 'new' && <InvoiceDetail id={inv} onClose={() => setInv(null)} />}
       <RetroModal open={!!mode} size="sm" onClose={() => setMode(null)} title={mode === 'cancel' ? 'Cancelar orden' : 'Devolución'} footer={<RetroButton variant="red" loading={run.isPending} disabled={reason.trim().length < 3} onClick={() => run.mutate()}>Confirmar</RetroButton>}>
         <div className="rb-col"><RetroInput label="Motivo (queda en auditoría)" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />{mode === 'refund' && <RetroSelect label="Devolver por" value={method} onChange={(e) => setMethod(e.target.value)} options={[{ value: 'CASH', label: 'Efectivo' }, { value: 'CARD', label: 'Tarjeta' }, { value: 'TRANSFER', label: 'Transferencia' }, { value: 'QR', label: 'QR' }]} />}<span className="rb-hint">Si requiere autorización se pedirá el PIN de un gerente.</span></div>
       </RetroModal>

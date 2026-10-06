@@ -37,6 +37,11 @@ export class SalesService {
     return o;
   }
 
+  /** Una cuenta con CFDI vigente no se anula ni se devuelve hasta cancelar la factura (consistencia fiscal). */
+  async assertNotInvoiced(q: Tx, orderId: string) {
+    if ((await q.query('SELECT 1 FROM invoice_orders WHERE order_id=$1 AND active', [orderId])).rowCount) throw new AppError('INVOICE_ACTIVE', 409);
+  }
+
   /** Cambia el estado validando la máquina de estados (a menos que sea una transición del sistema). */
   async setStatus(q: Tx, order: Dict, to: OrderStatus, opts: { force?: boolean; note?: string } = {}) {
     if (order.status === to) return;
@@ -372,6 +377,7 @@ export class SalesService {
 
   /** Anula la orden: items, tickets de cocina, inventario (sólo lo no preparado) y mesa. */
   async voidOrder(q: Tx, o: Dict, reason: string, authorizedBy: string, refunded = false) {
+    await this.assertNotInvoiced(q, o.id);
     const items = (await q.query(`SELECT id, status FROM order_items WHERE order_id=$1 AND ${ACTIVE_ITEM}`, [o.id])).rows;
     for (const it of items) await this.cancelSentItem(q, it.id, it.status, reason);
     await q.query(`UPDATE order_items SET status='CANCELLED' WHERE order_id=$1`, [o.id]);

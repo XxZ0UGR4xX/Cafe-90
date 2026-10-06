@@ -147,6 +147,7 @@ export class CatalogService {
   private static COLS = `p.id, p.category_id AS "categoryId", p.kind, p.sku, p.barcode, p.name, p.description, p.image_url AS "imageUrl",
       p.price, p.tax_id AS "taxId", p.is_available AS "isAvailable", p.is_inventoriable AS "isInventoriable",
       p.prep_time_sec AS "prepTimeSec", p.station_key AS "stationKey", p.sort_order AS "sortOrder",
+      p.sat_product_key AS "satProductKey", p.sat_unit_key AS "satUnitKey", p.sat_unit_name AS "satUnitName",
       COALESCE(t.rate,0) AS "taxRate", COALESCE(t.included_in_price,true) AS "taxIncluded"`;
 
   async listProducts(f: { categoryId?: string; q?: string; limit: number; offset: number }) {
@@ -212,6 +213,8 @@ export class CatalogService {
         pid = (await q.query(`INSERT INTO products (tenant_id,category_id,kind,sku,barcode,name,description,image_url,price,tax_id,is_available,is_inventoriable,prep_time_sec,station_key,sort_order)
                               VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, vals)).rows[0].id;
       }
+      if (d.satProductKey || d.satUnitKey || d.satUnitName)
+        await q.query('UPDATE products SET sat_product_key=COALESCE($2,sat_product_key), sat_unit_key=COALESCE($3,sat_unit_key), sat_unit_name=COALESCE($4,sat_unit_name) WHERE id=$1', [pid, d.satProductKey ?? null, d.satUnitKey ?? null, d.satUnitName ?? null]);
       await this.writeChildren(q, pid!, d);
       await this.audit.record(q, { action: id ? 'product.update' : 'product.create', entity: 'product', entityId: pid, newValue: { ...d, recipe: d.recipe?.length } });
       return pid!;

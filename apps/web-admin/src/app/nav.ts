@@ -20,6 +20,7 @@ export const ROUTES: RouteDef[] = [
   { path: '/promotions', icon: '🎟️', label: 'Promociones', title: 'Promociones', perms: ['promotions.promotion.read'] },
   { path: '/loyalty', icon: '⭐', label: 'Fidelización', title: 'Programa de lealtad', perms: ['loyalty.rule.read'] },
   { path: '/reports', icon: '📊', label: 'Reportes', title: 'Centro de reportes', anyOf: ['reports.sales.read', 'reports.profit.read', 'reports.inventory.read'] },
+  { path: '/invoices', icon: '🧾', label: 'Facturas', title: 'Facturación electrónica (CFDI)', perms: ['fiscal.invoice.read'] },
   { path: '/cash', icon: '💰', label: 'Caja', title: 'Caja y cortes', perms: ['cash.shift.operate'] },
   { path: '/audit', icon: '🕵️', label: 'Auditoría', title: 'Bitácora de auditoría', perms: ['audit.log.read'] },
   { path: '/settings', icon: '⚙️', label: 'Configuración', title: 'Configuración', anyOf: ['tenancy.settings.read', 'tenancy.settings.write', 'printing.manage'] },

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ENV, type Env } from '../../config/env';
 import { DbService, Tx } from '../../database/db.service';
 import { forbidden, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
@@ -11,7 +12,7 @@ type Dict = Record<string, any>;
 /** Cola de impresión: renderiza texto y lo encola por impresora; un agente local (ESC/POS) lo recoge y confirma. */
 @Injectable()
 export class PrintingService {
-  constructor(private readonly db: DbService, private readonly audit: AuditService, private readonly events: DomainEvents) {}
+  constructor(private readonly db: DbService, private readonly audit: AuditService, private readonly events: DomainEvents, @Inject(ENV) private readonly env: Env) {}
 
   register() {
     this.events.on('KitchenChanged', async (q, e) => { if (e.payload.new) await this.enqueueKitchen(q, e.payload.ticketId, e.branchId!); });
@@ -67,9 +68,10 @@ export class PrintingService {
   async receiptData(q: Tx, orderId: string): Promise<Dict> {
     const o = (await q.query(
       `SELECT o.id, o.number, o.channel, o.created_at AS "createdAt", o.subtotal, o.discount_total AS "discountTotal", o.tax_total AS "taxTotal", o.tip_total AS "tipTotal", o.total,
-              o.delivery_fee AS "deliveryFee", t.number AS "tableNumber", w.full_name AS "waiterName",
+              o.delivery_fee AS "deliveryFee", o.invoice_code AS "invoiceCode", t.number AS "tableNumber", w.full_name AS "waiterName",
               json_build_object('name', b.name, 'address', b.address, 'restaurant', r.name, 'taxId', r.tax_id) AS branch
          FROM orders o JOIN branches b ON b.id = o.branch_id JOIN restaurants r ON r.id = o.tenant_id LEFT JOIN tables t ON t.id = o.table_id LEFT JOIN users w ON w.id = o.waiter_id WHERE o.id=$1`, [orderId])).rows[0];
+    o.invoiceUrl = `${this.env.PUBLIC_WEB_URL.replace(/\/$/, '')}/factura`;
     o.items = (await q.query(`SELECT i.id, i.parent_item_id AS "parentItemId", i.name, i.qty, i.line_total AS "lineTotal",
         COALESCE((SELECT json_agg(json_build_object('type', m.type, 'name', m.name, 'priceDelta', m.price_delta)) FROM order_item_modifiers m WHERE m.order_item_id = i.id), '[]') AS modifiers
         FROM order_items i WHERE i.order_id=$1 AND i.status <> 'CANCELLED' ORDER BY i.created_at, i.id`, [orderId])).rows;

@@ -31,9 +31,10 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Impresión | 🟡 | cola + formato de texto 42/32 col. listo; **falta agente local ESC/POS** |
 | Notificaciones | 🟡 | in-app + tiempo real; sin email/SMS/push |
 | Público/QR | ✅ | pago en línea no integrado (pago al recibir) |
-| Facturación fiscal / pasarela de pagos | ⏳ | interfaces y país/PAC por definir |
+| Pasarela de pagos (tarjeta en línea) | ⏳ | interfaz por definir; hoy se registra método y referencia |
 | Modo arcade, sonidos, PWA | ✅ | |
 | Observabilidad (logs JSON, requestId) | ✅ | 🟡 sin OpenTelemetry/Sentry |
+| Facturación CFDI 4.0 (México) | 🟡 | Flujo completo: perfil fiscal, factura por ticket, autofactura pública con código del ticket, factura global, cancelación con motivo SAT, XML. **Proveedor SIMULADO** (sin validez fiscal): falta conectar un PAC real — ver `docs/FISCAL.md` |
 | CI/CD, Docker | 🟡 | workflow y compose básicos incluidos; sin despliegue |
 
 ## Seguridad pendiente antes de producción

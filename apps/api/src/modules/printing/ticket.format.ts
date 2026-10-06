@@ -35,6 +35,10 @@ export function renderReceipt(o: Dict, w = 42): string {
   if (o.tipTotal > 0) L.push(lr('Propina', money(o.tipTotal), w));
   L.push(lr('TOTAL', money(o.total + o.tipTotal), w), line(w));
   for (const p of o.payments ?? []) L.push(lr(`${p.kind === 'REFUND' ? 'Devolución' : 'Pago'} ${p.method}`, money(p.amount), w));
+  if (o.invoiceCode) {
+    const code = String(o.invoiceCode).replace(/(.{4})(?=.)/g, '$1-');
+    L.push('', center('FACTURA TU CONSUMO', w), ...wrap(o.invoiceUrl ?? '', w).map((x) => center(x, w)), center(`Código: ${code}`, w));
+  }
   L.push('', center('¡Gracias por tu visita!', w), center('RETROBURGER · THE 90s BURGER EXPERIENCE', w), '');
   return L.join('\n');
 }

@@ -9,18 +9,48 @@ import { useSound, play } from '../app/sound';
 import { syncNow, useConnection } from '../offline/connection';
 import { Async, FormModal, Row, fmtDate, num } from './common';
 import { CodeInput, MfaQr, RecoveryCodes } from '../app/MfaEnroll';
+import { rfcLooksValid, useFiscalCatalogs, personOf } from './fiscal/receptor';
 
-type Tab = 'general' | 'security' | 'branches' | 'taxes' | 'policies' | 'kitchen' | 'printers' | 'device' | 'sync' | 'integrations';
+type Tab = 'general' | 'fiscal' | 'security' | 'branches' | 'taxes' | 'policies' | 'kitchen' | 'printers' | 'device' | 'sync' | 'integrations';
 export default function Settings() {
   const { can } = useSession(); const [tab, setTab] = useState<Tab>('general');
-  const tabs: { key: Tab; label: string }[] = [{ key: 'general', label: '🏢 Restaurante' }, ...(can('tenancy.branch.read') ? [{ key: 'branches' as Tab, label: '🏪 Sucursales' }] : []), { key: 'taxes', label: '🧮 Impuestos y pagos' }, ...(can('tenancy.settings.read') ? [{ key: 'policies' as Tab, label: '📐 Reglas y políticas' }] : []), { key: 'kitchen', label: '👨‍🍳 Cocina' }, ...(can('printing.manage') ? [{ key: 'printers' as Tab, label: '🖨️ Impresoras' }] : []), { key: 'security', label: '🔐 Seguridad' }, { key: 'device', label: '🕹️ Este dispositivo' }, { key: 'sync', label: '📡 Sincronización' }, { key: 'integrations', label: '🔌 Integraciones' }];
+  const tabs: { key: Tab; label: string }[] = [{ key: 'general', label: '🏢 Restaurante' }, ...(can('tenancy.branch.read') ? [{ key: 'branches' as Tab, label: '🏪 Sucursales' }] : []), { key: 'taxes', label: '🧮 Impuestos y pagos' }, ...(can('fiscal.profile.read') ? [{ key: 'fiscal' as Tab, label: '🧾 Facturación' }] : []), ...(can('tenancy.settings.read') ? [{ key: 'policies' as Tab, label: '📐 Reglas y políticas' }] : []), { key: 'kitchen', label: '👨‍🍳 Cocina' }, ...(can('printing.manage') ? [{ key: 'printers' as Tab, label: '🖨️ Impresoras' }] : []), { key: 'security', label: '🔐 Seguridad' }, { key: 'device', label: '🕹️ Este dispositivo' }, { key: 'sync', label: '📡 Sincronización' }, { key: 'integrations', label: '🔌 Integraciones' }];
   return <><RetroTabs value={tab} onChange={setTab} tabs={tabs} />
-    {tab === 'general' && <General />}{tab === 'branches' && <Branches />}{tab === 'taxes' && <Taxes />}{tab === 'policies' && <Policies />}{tab === 'kitchen' && <Kitchen />}{tab === 'printers' && <Printers />}{tab === 'security' && <Security />}{tab === 'device' && <Device />}{tab === 'sync' && <Sync />}{tab === 'integrations' && <Integrations />}</>;
+    {tab === 'general' && <General />}{tab === 'branches' && <Branches />}{tab === 'taxes' && <Taxes />}{tab === 'policies' && <Policies />}{tab === 'kitchen' && <Kitchen />}{tab === 'printers' && <Printers />}{tab === 'fiscal' && <Fiscal />}{tab === 'security' && <Security />}{tab === 'device' && <Device />}{tab === 'sync' && <Sync />}{tab === 'integrations' && <Integrations />}</>;
 }
 
 function General() {
   const me = useSession((s) => s.me)!;
   return <RetroCard title="🏢 Restaurante"><div className="rb-grid rb-grid-2">{[['Nombre', me.tenant.name], ['Identificador (slug)', me.tenant.slug], ['Moneda', me.tenant.currency], ['Idioma', me.tenant.locale], ['Zona horaria', me.tenant.timezone]].map(([l, v]) => <div key={String(l)}><div className="rb-label">{l}</div><strong>{v}</strong></div>)}</div><p className="rb-hint">Los datos de cada restaurante están completamente aislados (multi-tenant). Los horarios de operación se configuran por sucursal.</p></RetroCard>;
+}
+
+function Fiscal() {
+  const { can } = useSession(); const w = can('fiscal.profile.write'); const cat = useFiscalCatalogs();
+  const q = useGet<any>(['fiscal', 'profile'], '/fiscal/profile'); const [f, setF] = useState<any | null>(null);
+  const cur = f ?? q.data?.profile ?? { rfc: '', legalName: '', regimenFiscal: '', postalCode: '', series: 'A', enabled: true };
+  const person = personOf(cur.rfc ?? '');
+  const regs = (cat.data?.regimenes ?? []).filter((r) => cat.data?.emitterRegimenes.includes(r.key) && (!person || r.types.includes(person)));
+  const save = useAct(() => put('/fiscal/profile', { rfc: cur.rfc.trim().toUpperCase(), legalName: cur.legalName.trim(), regimenFiscal: cur.regimenFiscal, postalCode: cur.postalCode, series: (cur.series || 'A').toUpperCase(), enabled: !!cur.enabled }),
+    { invalidate: [['fiscal'], ['invoices']], ok: 'Perfil fiscal guardado', onSuccess: () => setF(null) });
+  const win = useGet<Record<string, any>>(['settings', 'global', null], '/settings');
+  const setWin = useAct((v: number) => put('/settings', { key: 'fiscal.invoiceWindowDays', value: v, branchId: null }), { invalidate: [['settings']], ok: 'Plazo guardado' });
+  const prov = q.data?.provider;
+  return <Async q={q}><RetroCard title="🧾 Facturación electrónica (CFDI 4.0 · México)">
+    <div className="rb-row rb-wrap"><RetroBadge tone={q.data?.profile?.enabled ? 'ok' : 'warn'}>{q.data?.profile?.enabled ? 'Habilitada' : 'No habilitada'}</RetroBadge>
+      {prov ? <RetroBadge tone={prov.simulated ? 'orange' : 'ok'}>{prov.simulated ? 'Proveedor SIMULADO · sin validez fiscal' : `Proveedor: ${prov.key}`}</RetroBadge> : <RetroBadge tone="danger">Sin proveedor de timbrado (PAC)</RetroBadge>}</div>
+    <div className="rb-col" style={{ marginTop: 12 }}>
+      <Row><RetroInput label="RFC del emisor" value={cur.rfc} disabled={!w} maxLength={13} onChange={(e) => setF({ ...cur, rfc: e.target.value.toUpperCase().replace(/\s/g, '') })} error={cur.rfc.length >= 12 && !rfcLooksValid(cur.rfc) ? 'RFC con formato inválido' : undefined} />
+        <RetroInput label="Código postal (lugar de expedición)" value={cur.postalCode} disabled={!w} inputMode="numeric" maxLength={5} onChange={(e) => setF({ ...cur, postalCode: e.target.value.replace(/\D/g, '') })} /></Row>
+      <RetroInput label="Razón social" value={cur.legalName} disabled={!w} onChange={(e) => setF({ ...cur, legalName: e.target.value })} hint="Como en tu constancia de situación fiscal, sin «S.A. de C.V.»." />
+      <Row><RetroSelect label="Régimen fiscal" value={cur.regimenFiscal} disabled={!w} onChange={(e) => setF({ ...cur, regimenFiscal: e.target.value })} options={[{ value: '', label: person ? 'Selecciona…' : 'Primero captura el RFC' }, ...regs.map((r) => ({ value: r.key, label: `${r.key} · ${r.name}` }))]} />
+        <RetroInput label="Serie" value={cur.series} disabled={!w} maxLength={10} onChange={(e) => setF({ ...cur, series: e.target.value.toUpperCase() })} /></Row>
+      <RetroCheck label="Facturación habilitada" checked={!!cur.enabled} disabled={!w} onChange={(e) => setF({ ...cur, enabled: e.target.checked })} />
+      {w && <div className="rb-row"><RetroButton variant="neon" loading={save.isPending} disabled={!f || !rfcLooksValid(cur.rfc) || !cur.legalName || !cur.regimenFiscal || cur.postalCode.length !== 5} onClick={() => save.mutate()}>Guardar perfil fiscal</RetroButton></div>}
+    </div>
+    <p className="rb-hint">El sello digital (CSD) y el timbrado los realiza el PAC conectado. El código postal de cada sucursal (lugar de expedición) se edita en Configuración → Sucursales; si no tiene, se usa el de arriba.</p>
+  </RetroCard>
+    <RetroCard title="⏱️ Plazo para autofacturar" tone="plain"><div className="rb-row rb-wrap"><div className="rb-grow"><strong>Días para pedir factura de un ticket</strong><div className="rb-hint">Desde el sitio público con el código impreso en el ticket (por defecto 31).</div></div>
+      <input key={String(win.data?.['fiscal.invoiceWindowDays'])} className="rb-input" style={{ width: 110 }} inputMode="numeric" defaultValue={win.data?.['fiscal.invoiceWindowDays'] ?? 31} disabled={!can('tenancy.settings.write')} onBlur={(e) => { const n = Math.round(num(e.target.value)); if (n >= 1 && n <= 365 && n !== (win.data?.['fiscal.invoiceWindowDays'] ?? 31)) setWin.mutate(n); }} /></div></RetroCard></Async>;
 }
 
 function Security() {
@@ -50,9 +80,9 @@ function Security() {
 
 function Branches() {
   const { can } = useSession(); const q = useGet<any[]>(['branches', 'full'], '/branches'); const [f, setF] = useState<any | null>(null);
-  const save = useAct(() => patch(`/branches/${f.id}`, { name: f.name, address: f.address || undefined, phone: f.phone || undefined, status: f.status, timezone: f.timezone }), { invalidate: [['branches'], ['dashboard']], ok: 'Sucursal actualizada', onSuccess: () => setF(null) });
+  const save = useAct(() => patch(`/branches/${f.id}`, { name: f.name, address: f.address || undefined, phone: f.phone || undefined, status: f.status, timezone: f.timezone, postalCode: /^\d{5}$/.test(f.postalCode ?? '') ? f.postalCode : undefined }), { invalidate: [['branches'], ['dashboard']], ok: 'Sucursal actualizada', onSuccess: () => setF(null) });
   return <><Async q={q}><RetroTable rows={q.data ?? []} onRowClick={can('tenancy.branch.write') ? setF : undefined} columns={[{ key: 'code', header: 'Código' }, { key: 'name', header: 'Nombre' }, { key: 'address', header: 'Dirección', render: (r: any) => r.address ?? '—' }, { key: 'tz', header: 'Zona horaria', render: (r: any) => r.timezone }, { key: 'st', header: 'Estado', render: (r: any) => <RetroBadge tone={r.status === 'OPEN' ? 'ok' : 'warn'}>{r.status}</RetroBadge> }]} /></Async>
-    <FormModal open={!!f} onClose={() => setF(null)} title="Editar sucursal" busy={save.isPending} onSubmit={() => save.mutate()}>{f && <><RetroInput label="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /><RetroInput label="Dirección" value={f.address ?? ''} onChange={(e) => setF({ ...f, address: e.target.value })} /><Row><RetroInput label="Teléfono" value={f.phone ?? ''} onChange={(e) => setF({ ...f, phone: e.target.value })} /><RetroSelect label="Estado" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} options={[{ value: 'OPEN', label: 'Operando' }, { value: 'CLOSED', label: 'Cerrada' }, { value: 'MAINTENANCE', label: 'Mantenimiento' }]} /></Row></>}</FormModal></>;
+    <FormModal open={!!f} onClose={() => setF(null)} title="Editar sucursal" busy={save.isPending} onSubmit={() => save.mutate()}>{f && <><RetroInput label="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /><RetroInput label="Dirección" value={f.address ?? ''} onChange={(e) => setF({ ...f, address: e.target.value })} /><Row><RetroInput label="Teléfono" value={f.phone ?? ''} onChange={(e) => setF({ ...f, phone: e.target.value })} /><RetroInput label="C.P. (expedición de facturas)" value={f.postalCode ?? ''} inputMode="numeric" maxLength={5} onChange={(e) => setF({ ...f, postalCode: e.target.value.replace(/\D/g, '') })} /></Row><Row><RetroSelect label="Estado" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} options={[{ value: 'OPEN', label: 'Operando' }, { value: 'CLOSED', label: 'Cerrada' }, { value: 'MAINTENANCE', label: 'Mantenimiento' }]} /></Row></>}</FormModal></>;
 }
 
 function Taxes() {

@@ -40,6 +40,8 @@ export const ProductDto = z.object({
   prepTimeSec: z.number().int().min(0).max(7200).default(300),
   stationKey: z.string().max(30).nullable().optional(),
   sortOrder: z.number().int().default(0),
+  /** Claves SAT para facturación (c_ClaveProdServ de 8 dígitos, c_ClaveUnidad y su nombre). */
+  satProductKey: z.string().regex(/^\d{8}$/).optional(), satUnitKey: z.string().regex(/^[A-Z0-9]{2,3}$/).optional(), satUnitName: z.string().min(1).max(40).optional(),
   variants: z.array(z.object({ name: z.string().min(1).max(60), sku: z.string().max(40).optional(),
     priceDelta: z.number().default(0), qtyFactor: z.number().positive().max(10).default(1) })).max(10).default([]),
   modifierGroupIds: z.array(uuid).max(20).default([]),

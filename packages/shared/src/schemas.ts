@@ -31,6 +31,8 @@ export const BranchDto = z.object({
   phone: z.string().max(30).optional(),
   status: z.enum(['OPEN', 'CLOSED', 'MAINTENANCE']).default('OPEN'),
   timezone: z.string().max(60).default('America/Mexico_City'),
+  /** Código postal del lugar de expedición de los CFDI de esta sucursal. */
+  postalCode: z.string().regex(/^\d{5}$/).optional(),
 });
 export const BranchPatchDto = BranchDto.partial();
 

@@ -34,6 +34,8 @@ export const PERMISSIONS = [
   // Reportes
   'reports.sales.read', 'reports.profit.read', 'reports.inventory.read', 'reports.operations.read',
   'reports.corporate.read', 'reports.export',
+  // Facturación electrónica (CFDI)
+  'fiscal.profile.read', 'fiscal.profile.write', 'fiscal.invoice.read', 'fiscal.invoice.issue', 'fiscal.invoice.cancel',
   // Ajustes operativos
   'printing.manage', 'notifications.read', 'notifications.manage',
 ] as const;
@@ -57,7 +59,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   ADMIN: all,
   GERENTE: pick(
     (p) =>
-      !has(p, 'identity.role.write', 'tenancy.branch.write', 'reports.corporate') && p !== 'staff.salary.read',
+      !has(p, 'identity.role.write', 'tenancy.branch.write', 'reports.corporate') && p !== 'staff.salary.read' && p !== 'fiscal.profile.write',
   ),
   CAJERO: [
     'floor.table.read', 'floor.table.operate', 'floor.reservation.read',
@@ -65,6 +67,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     'sales.discount.apply', 'cash.shift.operate', 'cash.movement.write',
     'crm.customer.read', 'crm.customer.write', 'catalog.product.read', 'delivery.order.read', 'delivery.order.write',
     'loyalty.redeem', 'promotions.promotion.read', 'notifications.read', 'kitchen.ticket.read',
+    'fiscal.invoice.read', 'fiscal.invoice.issue',
   ],
   MESERO: [
     'floor.table.read', 'floor.table.operate', 'floor.reservation.read', 'floor.reservation.write',

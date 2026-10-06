@@ -11,7 +11,7 @@ const pages = {
   '/orders': lazy(() => import('./pages/Orders')), '/kitchen': lazy(() => import('./pages/Kitchen')), '/delivery': lazy(() => import('./pages/Delivery')), '/inventory': lazy(() => import('./pages/Inventory')),
   '/purchasing': lazy(() => import('./pages/Purchasing')), '/suppliers': lazy(() => import('./pages/Suppliers')), '/menu': lazy(() => import('./pages/MenuAdmin')), '/customers': lazy(() => import('./pages/Customers')),
   '/staff': lazy(() => import('./pages/Staff')), '/reservations': lazy(() => import('./pages/Reservations')), '/promotions': lazy(() => import('./pages/Promotions')), '/loyalty': lazy(() => import('./pages/Loyalty')),
-  '/reports': lazy(() => import('./pages/Reports')), '/cash': lazy(() => import('./pages/Cash')), '/audit': lazy(() => import('./pages/Audit')), '/settings': lazy(() => import('./pages/Settings')),
+  '/reports': lazy(() => import('./pages/Reports')), '/invoices': lazy(() => import('./pages/fiscal/invoices')), '/cash': lazy(() => import('./pages/Cash')), '/audit': lazy(() => import('./pages/Audit')), '/settings': lazy(() => import('./pages/Settings')),
 } as const;
 
 export function App() {
