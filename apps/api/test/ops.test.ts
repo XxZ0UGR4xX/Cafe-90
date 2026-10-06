@@ -273,3 +273,12 @@ describe('impresión', () => {
     expect(txt.body).toContain('Orden #');
   });
 });
+
+describe('folios', () => {
+  it('el contador de folios usa el día operativo en formato ISO y consecutivos', async () => {
+    const a = await order([item(f.prod.papas)]); const b = await order([item(f.prod.papas)]);
+    expect(b.number).toBe(a.number + 1);
+    const scopes = await f.sql(`SELECT scope FROM counters WHERE scope LIKE 'order:%'`);
+    expect(scopes.every((s: any) => /^order:[0-9a-f-]{36}:\d{4}-\d{2}-\d{2}$/.test(s.scope))).toBe(true);
+  });
+});

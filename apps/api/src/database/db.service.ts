@@ -12,6 +12,7 @@ export interface Tx {
 // numeric → number (importes con ≤4 decimales caben sin pérdida en double); bigint → number
 types.setTypeParser(1700, (v) => parseFloat(v));
 types.setTypeParser(20, (v) => parseInt(v, 10));
+types.setTypeParser(1082, (v) => v);   // date → 'YYYY-MM-DD' (sin conversión de zona horaria)
 
 @Injectable()
 export class DbService implements OnModuleDestroy {

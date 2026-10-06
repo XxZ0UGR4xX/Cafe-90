@@ -12,5 +12,5 @@ import { TenancyController } from './tenancy.controller';
 })
 export class TenancyModule implements OnModuleInit {
   constructor(private readonly provisioner: ProvisionerService) {}
-  async onModuleInit() { await this.provisioner.syncPermissionCatalog(); }
+  async onModuleInit() { await this.provisioner.syncPermissionCatalog(); await this.provisioner.syncSystemRoles(); }
 }

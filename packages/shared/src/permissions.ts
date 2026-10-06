@@ -81,6 +81,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   REPARTIDOR: ['delivery.order.own', 'notifications.read'],
 };
 
+// Todo el personal necesita ver el nombre de su(s) sucursal(es) (alcance limitado por rol).
+for (const r of ['CAJERO', 'MESERO', 'COCINERO', 'ALMACEN', 'REPARTIDOR'] as RoleKey[]) {
+  if (!DEFAULT_ROLE_PERMISSIONS[r].includes('tenancy.branch.read')) DEFAULT_ROLE_PERMISSIONS[r] = [...DEFAULT_ROLE_PERMISSIONS[r], 'tenancy.branch.read'];
+}
+
 // Garantía de diseño: roles operativos nunca ven costos/utilidad.
 for (const r of ['CAJERO', 'MESERO', 'COCINERO', 'REPARTIDOR'] as RoleKey[]) {
   DEFAULT_ROLE_PERMISSIONS[r] = DEFAULT_ROLE_PERMISSIONS[r].filter(NO_COSTS);

@@ -20,6 +20,7 @@ export async function createApp(): Promise<NestFastifyApplication> {
     loggerInstance: logger,
     genReqId: (req: { headers: Record<string, unknown> }) => (req.headers['x-request-id'] as string) || randomUUID(),
     trustProxy: true,
+    disableRequestLogging: true,
     bodyLimit: 1_048_576,
   });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {

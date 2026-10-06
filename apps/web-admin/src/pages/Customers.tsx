@@ -1,0 +1,29 @@
+import { useState } from 'react';
+import { RetroBadge, RetroButton, RetroCard, RetroCheck, RetroInput, RetroSelect, RetroStatCard, RetroTable, formatMoney2 } from '@retroburger/ui';
+import { post, put, get } from '../app/api';
+import { useAct, useGet } from '../app/hooks';
+import { useSession } from '../app/auth';
+import { Async, FormModal, Row, fmtDate } from './common';
+
+const SEG: Record<string, any> = { NUEVO: 'info', FRECUENTE: 'ok', VIP: 'warn', INACTIVO: 'neutral' };
+export default function Customers() {
+  const { can } = useSession(); const [q, setQ] = useState(''); const [seg, setSeg] = useState('');
+  const list = useGet<any[]>(['customers', q, seg], '/customers', { q: q || undefined, segment: seg || undefined, limit: 100 });
+  const [f, setF] = useState<any | null>(null); const [detail, setDetail] = useState<any | null>(null);
+  const save = useAct(() => { const b = { name: f.name, phone: f.phone || undefined, email: f.email || undefined, birthday: f.birthday?.slice(0, 10) || undefined, marketingConsent: f.marketingConsent ?? false, notes: f.notes || undefined }; return f.id ? put(`/customers/${f.id}`, b) : post('/customers', b); }, { invalidate: [['customers']], ok: 'Cliente guardado', onSuccess: () => setF(null) });
+  const open = async (id: string) => { const [c, l] = await Promise.all([get(`/customers/${id}`), get(`/loyalty/customers/${id}`).catch(() => null)]); setDetail({ ...c, loyalty: l }); };
+  return (
+    <>
+      <div className="rb-row rb-wrap"><RetroInput aria-label="Buscar" placeholder="🔎 Nombre, teléfono o correo" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 320 }} />
+        <RetroSelect aria-label="Segmento" value={seg} onChange={(e) => setSeg(e.target.value)} options={[{ value: '', label: 'Todos los segmentos' }, { value: 'NUEVO', label: 'Nuevos' }, { value: 'FRECUENTE', label: 'Frecuentes' }, { value: 'VIP', label: 'VIP' }, { value: 'INACTIVO', label: 'Inactivos' }]} />
+        {can('crm.customer.write') && <span className="rb-end"><RetroButton variant="neon" onClick={() => setF({ name: '', marketingConsent: false })}>+ Cliente</RetroButton></span>}</div>
+      <Async q={list}><RetroTable rows={list.data ?? []} onRowClick={(r) => void open(r.id)} columns={[{ key: 'name', header: 'Cliente', render: (r: any) => <strong>{r.name}</strong> }, { key: 'phone', header: 'Teléfono' }, { key: 'seg', header: 'Segmento', render: (r: any) => <RetroBadge tone={SEG[r.segment]}>{r.segment}</RetroBadge> }, { key: 'v', header: 'Visitas', numeric: true, render: (r: any) => r.visits }, { key: 's', header: 'Gastado', numeric: true, render: (r: any) => formatMoney2(r.totalSpent) }, { key: 'a', header: 'Ticket prom.', numeric: true, render: (r: any) => formatMoney2(r.avgTicket) }, { key: 'l', header: 'Última visita', render: (r: any) => fmtDate(r.lastVisitAt) }]} /></Async>
+      <FormModal open={!!f} onClose={() => setF(null)} title={f?.id ? 'Editar cliente' : 'Nuevo cliente'} busy={save.isPending} disabled={!f?.name} onSubmit={() => save.mutate()}>{f && <><RetroInput label="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /><Row><RetroInput label="Teléfono" value={f.phone ?? ''} onChange={(e) => setF({ ...f, phone: e.target.value })} /><RetroInput label="Correo" type="email" value={f.email ?? ''} onChange={(e) => setF({ ...f, email: e.target.value })} /></Row><RetroInput label="Cumpleaños" type="date" value={(f.birthday ?? '').slice(0, 10)} onChange={(e) => setF({ ...f, birthday: e.target.value })} /><RetroInput label="Notas" value={f.notes ?? ''} onChange={(e) => setF({ ...f, notes: e.target.value })} /><RetroCheck label="Acepta promociones" checked={f.marketingConsent ?? false} onChange={(e) => setF({ ...f, marketingConsent: e.target.checked })} /></>}</FormModal>
+      <FormModal open={!!detail} onClose={() => setDetail(null)} title={detail?.name ?? ''} size="lg" submitLabel={can('crm.customer.write') ? 'Editar' : 'Cerrar'} onSubmit={() => { if (can('crm.customer.write')) { setF(detail); } setDetail(null); }}>{detail && <>
+        <div className="rb-grid rb-grid-3"><RetroStatCard label="Visitas" value={detail.visits} icon="👣" /><RetroStatCard label="Total gastado" value={formatMoney2(detail.totalSpent)} icon="💰" accent="var(--mustard)" /><RetroStatCard label="Ticket promedio" value={formatMoney2(detail.avgTicket)} icon="🧾" accent="var(--blue)" />
+          {detail.loyalty && <><RetroStatCard label="Puntos" value={detail.loyalty.balance} icon="⭐" accent="var(--orange)" /><RetroStatCard label="Nivel" value={detail.loyalty.level} icon="🏅" accent="var(--neon-dark)" /></>}<RetroStatCard label="Segmento" value={detail.segment} icon="🎯" /></div>
+        <RetroCard title="Últimos pedidos" tone="plain"><RetroTable rows={detail.recentOrders} columns={[{ key: 'n', header: '#', render: (r: any) => `#${String(r.number).padStart(4, '0')}` }, { key: 'at', header: 'Fecha', render: (r: any) => fmtDate(r.createdAt) }, { key: 't', header: 'Total', numeric: true, render: (r: any) => formatMoney2(r.total) }, { key: 's', header: 'Estado', render: (r: any) => r.status }]} /></RetroCard>
+        {detail.loyalty?.transactions?.length > 0 && <RetroCard title="Movimientos de puntos" tone="plain"><RetroTable rows={detail.loyalty.transactions} columns={[{ key: 'at', header: 'Fecha', render: (r: any) => fmtDate(r.at) }, { key: 't', header: 'Tipo', render: (r: any) => r.type }, { key: 'p', header: 'Puntos', numeric: true, render: (r: any) => (r.points > 0 ? `+${r.points}` : r.points) }, { key: 'b', header: 'Saldo', numeric: true, render: (r: any) => r.balanceAfter }]} /></RetroCard>}</>}</FormModal>
+    </>
+  );
+}

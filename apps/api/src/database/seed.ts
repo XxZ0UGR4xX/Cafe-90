@@ -6,6 +6,7 @@ import 'reflect-metadata';
 import { createApp } from '../bootstrap';
 import { ProvisionerService } from '../modules/tenancy/provisioner.service';
 import { DbService } from './db.service';
+import { seedHistory } from './seed-history';
 import { BRANCHES, CATEGORIES, COMBOS, CUSTOMERS, INGREDIENTS, MODIFIER_GROUPS, PRODUCTS, STAFF, SUPPLIERS } from './seed-data';
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@retroburger.test';
@@ -92,6 +93,8 @@ export async function seedDemo(log: (m: string) => void = console.log) {
 
   for (const [name, phone, email] of CUSTOMERS) await call('POST', '/customers', T, { name, phone, email, marketingConsent: true }).catch(() => undefined);
 
+  const tenantId = (await db.system('SELECT resolve_tenant($1) AS t', ['retroburger'])).rows[0].t as string;
+  if (process.env.SEED_HISTORY !== 'false') await seedHistory(db, tenantId, 21, log);
   log(`✅ Seed completo. Tenant: retroburger | Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   log(`   Personal de demo: <rol><n>-<sucursal>@retroburger.test (ej. cajero-centro@retroburger.test) / ${STAFF_PASSWORD} — PIN ${STAFF_PIN}`);
   await app.close();

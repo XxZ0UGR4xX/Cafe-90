@@ -415,7 +415,7 @@ export class SalesService {
                 o.table_session_id AS "tableSessionId", o.table_id AS "tableId", t.number AS "tableNumber", o.customer_id AS "customerId", o.customer_name AS "customerName",
                 o.waiter_id AS "waiterId", w.full_name AS "waiterName", o.guests, o.subtotal, o.discount_total AS "discountTotal", o.tax_total AS "taxTotal", o.tip_total AS "tipTotal",
                 o.total, o.paid_total AS "paidTotal", o.notes, o.needs_review AS "needsReview", o.cancel_reason AS "cancelReason", o.created_at AS "createdAt", o.sent_at AS "sentAt", o.closed_at AS "closedAt",
-                o.version, o.source, ${ctx().principal!.can('catalog.cost.read', undefined) ? 'o.cost_total' : 'NULL::numeric'} AS "costTotal"
+                o.version, o.source, o.client_uuid AS "clientUuid", ${ctx().principal!.can('catalog.cost.read', undefined) ? 'o.cost_total' : 'NULL::numeric'} AS "costTotal"
            FROM orders o LEFT JOIN tables t ON t.id = o.table_id LEFT JOIN users w ON w.id = o.waiter_id WHERE o.id=$1`, [id])).rows[0];
       if (!o) throw notFound('order');
       this.assertBranch('sales.order.read', o.branchId);

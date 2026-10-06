@@ -36,6 +36,28 @@ export class ProvisionerService {
     return { tenantId: id, adminId };
   }
 
+  /** Sincroniza los permisos de los roles del sistema con los valores por defecto vigentes (upgrades). Idempotente. */
+  async syncSystemRoles(): Promise<number> {
+    const tenants = (await this.db.system<{ id: string }>('SELECT list_active_tenants() AS id')).rows.map((r) => r.id);
+    let changed = 0;
+    for (const t of tenants) {
+      await this.db.tx(async (q) => {
+        for (const key of ROLE_KEYS) {
+          const role = (await q.query('SELECT id FROM roles WHERE key=$1 AND is_system', [key])).rows[0];
+          if (!role) continue;
+          const want = [...DEFAULT_ROLE_PERMISSIONS[key]].sort();
+          const have = (await q.query('SELECT permission_key FROM role_permissions WHERE role_id=$1', [role.id])).rows.map((r) => r.permission_key as string).sort();
+          if (JSON.stringify(want) === JSON.stringify(have)) continue;
+          await q.query('DELETE FROM role_permissions WHERE role_id=$1', [role.id]);
+          await q.query(`INSERT INTO role_permissions (tenant_id, role_id, permission_key) SELECT app_tenant_id(), $1, unnest($2::text[])`, [role.id, want]);
+          await q.query('UPDATE roles SET version = version + 1 WHERE id=$1', [role.id]);
+          changed++;
+        }
+      }, t);
+    }
+    return changed;
+  }
+
   private async seedRoles(q: Tx) {
     for (const key of ROLE_KEYS) {
       const r = await q.query(

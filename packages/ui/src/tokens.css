@@ -1,0 +1,33 @@
+/* RETROBURGER — design tokens. Fuente única de color/tipografía/espaciado del sistema. */
+:root {
+  --ketchup: #d62828; --ketchup-dark: #a31d1d; --ketchup-soft: #ffe0dd;
+  --mustard: #f6b800; --mustard-dark: #c99400; --mustard-soft: #fff1bf;
+  --orange: #f77f00; --orange-soft: #ffe2c4;
+  --cream: #fff4dc; --cream-2: #ffe9b8; --paper: #ffffff;
+  --ink: #111111; --ink-2: #3b3b3b; --ink-3: #6b6256; --line: #e3d3a8;
+  --neon: #39ff14; --neon-dark: #17b800; --neon-soft: #e4ffdc;
+  --blue: #1e6bff; --blue-soft: #dce8ff;
+  --ok: #17a34a; --warn: #f59e0b; --danger: #d62828; --info: #1e6bff;
+
+  --font-display: 'Bungee', 'Arial Black', system-ui, sans-serif;
+  --font-arcade: 'Press Start 2P', 'Courier New', monospace;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+
+  --bw: 3px;
+  --border: var(--bw) solid var(--ink);
+  --shadow: 4px 4px 0 var(--ink);
+  --shadow-sm: 2px 2px 0 var(--ink);
+  --shadow-lg: 6px 6px 0 var(--ink);
+  --radius: 12px; --radius-sm: 8px;
+  --glow-neon: 0 0 0 2px var(--ink), 0 0 14px 3px rgba(57, 255, 20, .75);
+  --glow-red: 0 0 0 2px var(--ink), 0 0 14px 3px rgba(214, 40, 40, .55);
+  --touch: 48px;       /* tamaño mínimo de objetivo táctil */
+  --sidebar-w: 248px; --sidebar-w-collapsed: 76px;
+  --z-modal: 1000; --z-toast: 1100; --z-arcade: 1200;
+}
+.rb-theme-night {   /* KDS / modo cocina: oscuro, alto contraste */
+  --cream: #15110e; --cream-2: #221b15; --paper: #1d1813; --ink: #fff4dc; --ink-2: #e7d9b8; --ink-3: #b3a47f; --line: #3a2f22;
+  --border: var(--bw) solid #fff4dc; --shadow: 4px 4px 0 #000; --shadow-sm: 2px 2px 0 #000; --shadow-lg: 6px 6px 0 #000;
+  --ketchup-soft: #4a1717; --mustard-soft: #4a3a05; --neon-soft: #123a0c; --blue-soft: #10264f; --orange-soft: #4a2a08;
+}
