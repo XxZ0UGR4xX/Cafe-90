@@ -55,3 +55,12 @@ Una instancia aguanta una operación de varias sucursales, pero para réplicas d
 
 ## Pendiente
 Prueba en un servidor real con dominio y carga; despliegue automático (CD) y *rollback* automatizado; observabilidad (métricas/trazas); Redis; endurecimiento anterior.
+
+## Monitoreo
+La API expone `GET /metrics` (formato Prometheus) **sólo si defines `METRICS_TOKEN`** (≥16 caracteres, Bearer). El proxy responde 404 a `/metrics` desde Internet; Prometheus lo consulta por la red interna.
+```bash
+printf '%s' "$METRICS_TOKEN" > deploy/prometheus/metrics_token      # el mismo valor del .env.prod
+# en .env.prod: METRICS_TOKEN=…  y  METRICS_TOKEN_FILE=./prometheus/metrics_token
+docker compose --env-file deploy/.env.prod -f deploy/docker-compose.prod.yml --profile monitoring up -d
+```
+Métricas: duración de peticiones por método/**plantilla** de ruta/estado (sin ids ni datos personales), pool de BD, proceso de Node, correos enviados/fallidos, facturas timbradas/con error, fallos de login y última ejecución de las tareas periódicas. Reglas de alerta en `deploy/prometheus/alerts.yml` (API caída, >2 % de 5xx, p95 > 1 s, pool saturado, correo/PAC fallando, ráfaga de logins fallidos, tareas detenidas); conéctalas a Alertmanager/Grafana Cloud o a tu canal de avisos.

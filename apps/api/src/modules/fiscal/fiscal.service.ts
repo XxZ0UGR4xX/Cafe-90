@@ -6,6 +6,7 @@ import { ctx } from '../../common/request-context';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../tenancy/settings.service';
 import { MailService } from '../mail/mail.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { computeTotals } from '../sales/pricing';
 import { amountToCents, centsToAmount } from '../sales/pricing';
 import {
@@ -31,7 +32,7 @@ export const cfdiDate = (tz: string, at = new Date()) => at.toLocaleString('sv-S
 @Injectable()
 export class FiscalService {
   constructor(
-    private readonly db: DbService, private readonly audit: AuditService, private readonly settings: SettingsService, private readonly mail: MailService,
+    private readonly db: DbService, private readonly audit: AuditService, private readonly settings: SettingsService, private readonly mail: MailService, private readonly metrics: MetricsService,
     @Inject(FISCAL_PROVIDER) private readonly provider: FiscalProvider | null, @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -181,12 +182,14 @@ export class FiscalService {
           newValue: { uuid: r.uuid, folio: `${inv.series}-${inv.folio}`, total: inv.total, simulated: provider.simulated } });
         await this.queueInvoiceEmail(q, invoiceId);
       });
+      this.metrics.invoices.inc({ result: 'stamped' });
     } catch (e) {
       const msg = e instanceof Error ? e.message.slice(0, 500) : 'Error desconocido';
       await this.db.independent(async (q) => {
         await q.query(`UPDATE invoices SET status='ERROR', error_message=$2 WHERE id=$1 AND status='PENDING'`, [invoiceId, msg]);
         await q.query('UPDATE invoice_orders SET active=false WHERE invoice_id=$1', [invoiceId]);
       });
+      this.metrics.invoices.inc({ result: 'error' });
       throw new AppError('FISCAL_PROVIDER_ERROR', 502, { reason: msg }, true);
     }
     return this.get(invoiceId, true);

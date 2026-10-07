@@ -9,6 +9,8 @@
 }
 {$API_HOST} {
 	encode zstd gzip
+	# Las métricas son sólo para Prometheus (red interna): nunca por Internet
+	respond /metrics 404
 	# Socket.IO (/ws) usa WebSocket: reverse_proxy lo maneja sin configuración extra
 	reverse_proxy api:3000 {
 		header_up X-Forwarded-For {remote_host}

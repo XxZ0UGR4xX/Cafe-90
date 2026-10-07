@@ -5,13 +5,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ReconciliationService } from '../inventory/reconciliation.service';
 import { MailService } from '../mail/mail.service';
 import { requestContext } from '../../common/request-context';
+import { MetricsService } from '../metrics/metrics.service';
 
 /** Tareas periódicas por tenant: alertas de reservación, corte pendiente, pedidos retrasados y caducidades. */
 @Injectable()
 export class JobsService implements OnModuleInit, OnApplicationShutdown {
   private timer?: NodeJS.Timeout;
   private readonly log = new Logger('Jobs');
-  constructor(private readonly db: DbService, private readonly notifications: NotificationsService, private readonly recon: ReconciliationService, private readonly mail: MailService, @Inject(ENV) private readonly env: Env) {}
+  constructor(private readonly db: DbService, private readonly notifications: NotificationsService, private readonly recon: ReconciliationService, private readonly mail: MailService, private readonly metrics: MetricsService, @Inject(ENV) private readonly env: Env) {}
 
   onModuleInit() {
     if (this.env.JOBS_ENABLED === 'true' && this.env.NODE_ENV !== 'test') {
@@ -31,6 +32,7 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
       // conciliación nocturna (≈ 03:00 hora de México = 09:00 UTC); una vez por día y tenant aunque haya varias instancias
       if (new Date().getUTCHours() === 9) await this.nightly(t).catch((e) => this.log.error(e));
     }
+    this.metrics.jobRun.set({ job: 'periodic' }, Date.now() / 1000);
     return { tenants: tenants.length, notifications: n };
   }
 
@@ -48,6 +50,7 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
           title: `🧮 Inventario descuadrado: ${f.ingredient}`, body: f.detail, payload: f, dedupeKey: `recon:${f.kind}:${f.branchId}:${f.ingredientId}:${day}` });
       await q.query(`UPDATE job_runs SET finished_at = now(), result = $1 WHERE job = 'inventory.reconcile' AND run_on = $2::date`,
         [JSON.stringify({ findings: findings.length, critical: findings.filter((f) => f.severity === 'CRITICAL').length }), day]);
+      this.metrics.jobRun.set({ job: 'inventory.reconcile' }, Date.now() / 1000);
       return { ran: true, findings: findings.length };
     }, tenantId);
   }

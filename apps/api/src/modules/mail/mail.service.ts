@@ -3,6 +3,7 @@ import { ENV, type Env } from '../../config/env';
 import { DbService, Tx } from '../../database/db.service';
 import { ctx } from '../../common/request-context';
 import type { MailTransport } from './mail.transport';
+import { MetricsService } from '../metrics/metrics.service';
 
 export const MAIL_TRANSPORT = Symbol('MAIL_TRANSPORT');
 export interface OutgoingMail {
@@ -22,7 +23,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 @Injectable()
 export class MailService {
   private readonly log = new Logger('Mail');
-  constructor(private readonly db: DbService, @Inject(MAIL_TRANSPORT) readonly transport: MailTransport, @Inject(ENV) private readonly env: Env) {}
+  constructor(private readonly db: DbService, @Inject(MAIL_TRANSPORT) readonly transport: MailTransport, @Inject(ENV) private readonly env: Env, private readonly metrics: MetricsService) {}
 
   /** Direcciones inválidas se descartan; sin destinatarios válidos no se encola nada. Devuelve true si se encoló. */
   async enqueue(q: Tx, m: OutgoingMail): Promise<boolean> {
@@ -56,9 +57,9 @@ export class MailService {
       try {
         await this.transport.send({ from: this.env.MAIL_FROM, to: e.to_addrs, subject: e.subject, text: e.body_text, html: e.body_html ?? undefined, attachments: e.attachments });
         await this.db.tx((q) => q.query(`UPDATE email_outbox SET status='SENT', sent_at=now(), attempts=attempts+1, last_error=NULL WHERE id=$1`, [e.id]));
-        sent++;
+        sent++; this.metrics.mailSent.inc();
       } catch (err) {
-        failed++; const n = e.attempts + 1; const dead = n >= MAX_ATTEMPTS;
+        failed++; this.metrics.mailFailed.inc(); const n = e.attempts + 1; const dead = n >= MAX_ATTEMPTS;
         this.log.warn(`correo ${e.id} falló (${n}/${MAX_ATTEMPTS}): ${(err as Error).message}`);
         await this.db.tx((q) => q.query(
           `UPDATE email_outbox SET status=$2, attempts=$3, last_error=$4, next_attempt_at = now() + ($5 || ' minutes')::interval WHERE id=$1`,

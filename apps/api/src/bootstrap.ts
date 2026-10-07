@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { createLogger, PinoNestLogger } from './common/logger';
 import { requestContext } from './common/request-context';
 import { loadEnv } from './config/env';
+import { MetricsService } from './modules/metrics/metrics.service';
 
 export async function createApp(): Promise<NestFastifyApplication> {
   const env = loadEnv();
@@ -32,7 +33,9 @@ export async function createApp(): Promise<NestFastifyApplication> {
   fastify.addHook('onRequest', (req, _reply, done) => {
     requestContext.run({ requestId: req.id as string, ip: req.ip, userAgent: req.headers['user-agent'] }, done);
   });
+  const metrics = app.get(MetricsService);
   fastify.addHook('onResponse', (req, reply, done) => {
+    if (!req.url.startsWith('/metrics')) metrics.observeRequest(req.method, req.routeOptions?.url, reply.statusCode, reply.elapsedTime / 1000);
     req.log.info({ requestId: req.id, method: req.method, url: req.url.split('?')[0], status: reply.statusCode,
       ms: Math.round(reply.elapsedTime) }, 'request');
     done();

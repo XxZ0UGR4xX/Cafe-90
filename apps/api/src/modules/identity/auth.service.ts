@@ -8,6 +8,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrincipalRepository } from './principal.repository';
 import { hashSecret, verifySecret } from './passwords';
 import { MFA_REQUIRED_ROLES } from '@retroburger/shared';
+import { MetricsService } from '../metrics/metrics.service';
 import { hashToken, newOpaqueToken, signAccess, signMfa } from './tokens';
 
 const MAX_FAILED = 5;
@@ -30,6 +31,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly principals: PrincipalRepository,
     @Inject(ENV) private readonly env: Env,
+    private readonly metrics: MetricsService,
   ) {}
 
   private async resolveTenant(slug: string): Promise<string | null> {
@@ -88,6 +90,7 @@ export class AuthService {
       return { session };
     }, tenantId);
 
+    if ('fail' in outcome) this.metrics.loginFailures.inc();
     if ('fail' in outcome) throw new AppError(outcome.fail!, outcome.fail === 'ACCOUNT_LOCKED' ? 423 : 401);
     if ('mfa' in outcome) {
       // PIN rápido nunca puede saltarse el 2FA: se rechaza (la UI de PIN es para personal de piso).

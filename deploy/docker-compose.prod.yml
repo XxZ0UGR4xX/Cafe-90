@@ -42,6 +42,7 @@ services:
       SMTP_URL: ${SMTP_URL:-}
       MAIL_FROM: ${MAIL_FROM:-RetroBurger <no-reply@localhost>}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     depends_on:
       db: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
@@ -68,7 +69,17 @@ services:
     depends_on: [api, web-admin, web-public]
     networks: [edge]
 
+  # Monitoreo (opcional):  docker compose … --profile monitoring up -d   (requiere METRICS_TOKEN; Prometheus sólo en la red interna)
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    volumes: [./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro, ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro, "${METRICS_TOKEN_FILE:?define METRICS_TOKEN_FILE (archivo con el token)}:/etc/prometheus/metrics_token:ro", promdata:/prometheus]
+    depends_on: [api]
+    networks: [internal]
+
 networks:
   internal: { internal: true }     # la base de datos nunca sale a Internet
   edge: {}
-volumes: { pgdata: {}, caddy_data: {}, caddy_config: {} }
+volumes: { pgdata: {}, caddy_data: {}, caddy_config: {}, promdata: {} }

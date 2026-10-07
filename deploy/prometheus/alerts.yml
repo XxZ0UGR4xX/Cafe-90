@@ -1,0 +1,43 @@
+groups:
+  - name: retroburger
+    rules:
+      - alert: ApiCaida
+        expr: up{job="retroburger-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "La API no responde al scrape (2 min)", description: "Revisa `docker compose ps` y los logs de api. Sin API no hay POS ni KDS (el POS sigue en modo offline)." }
+      - alert: Errores5xx
+        expr: sum(rate(rb_http_request_duration_seconds_count{status=~"5.."}[5m])) / sum(rate(rb_http_request_duration_seconds_count[5m])) > 0.02
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "Más del 2 % de las peticiones responden 5xx", description: "Busca `unhandled error` en los logs de la API (requestId en la respuesta)." }
+      - alert: LatenciaP95Alta
+        expr: histogram_quantile(0.95, sum by (le) (rate(rb_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "p95 de latencia > 1 s durante 10 min", description: "Revisa carga, pool de BD y consultas lentas." }
+      - alert: PoolDeBdSaturado
+        expr: rb_db_pool_connections{state="waiting"} > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Hay peticiones esperando una conexión de BD (5 min)", description: "El pool (20) está saturado: consultas lentas o fuga de conexiones." }
+      - alert: CorreosFallando
+        expr: increase(rb_mail_failed_total[30m]) > 5
+        for: 0m
+        labels: { severity: warning }
+        annotations: { summary: "Fallan envíos de correo (SMTP)", description: "Revisa Configuración → Integraciones (bandeja) y SMTP_URL." }
+      - alert: FacturasConError
+        expr: increase(rb_invoices_total{result="error"}[30m]) > 2
+        for: 0m
+        labels: { severity: warning }
+        annotations: { summary: "El proveedor de timbrado está rechazando facturas", description: "Revisa el estado del PAC; las facturas en ERROR se reintentan desde Facturas → detalle." }
+      - alert: IntentosDeLoginAnomalos
+        expr: increase(rb_login_failures_total[10m]) > 50
+        for: 0m
+        labels: { severity: warning }
+        annotations: { summary: "Muchos inicios de sesión fallidos (posible ataque de fuerza bruta)", description: "Hay bloqueo por cuenta y límite por IP; revisa la auditoría (auth.login_failed)." }
+      - alert: TareasPeriodicasDetenidas
+        expr: time() - rb_job_last_run_timestamp_seconds{job="periodic"} > 300
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Las tareas periódicas (alertas, correo) no corren hace > 5 min", description: "Revisa que JOBS_ENABLED=true y los logs de la API." }

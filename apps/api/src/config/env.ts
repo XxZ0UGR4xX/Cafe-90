@@ -27,6 +27,8 @@ const schema = z.object({
   /** Correo saliente. Sin SMTP_URL los correos sólo se registran en el log (desarrollo/pruebas). Ej.: smtps://usuario:clave@smtp.proveedor.com:465 */
   SMTP_URL: z.string().url().optional(),
   MAIL_FROM: z.string().default('RetroBurger <no-reply@retroburger.test>'),
+  /** Token para GET /metrics (Prometheus). Sin él, el endpoint no existe. */
+  METRICS_TOKEN: z.string().min(16, 'METRICS_TOKEN debe tener al menos 16 caracteres').optional(),
   /** URL pública del sitio de clientes (se imprime en el ticket para autofacturación). */
   PUBLIC_WEB_URL: z.string().url().default('http://localhost:5174'),
 }).superRefine((v, ctx) => {
