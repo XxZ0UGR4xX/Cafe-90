@@ -29,7 +29,8 @@ describe('promociones', () => {
 
   it('Happy Hour con horario vigente descuenta 20 % en bebidas; fuera de horario no', async () => {
     const catalog = (await get('/categories', f.admin)).body; const bebidas = catalog.find((c: any) => c.name === 'Bebidas').id;
-    const day = new Date().getDay();
+    // el motor evalúa el horario en la zona de la sucursal (México), no en UTC: entre 18:00 y 24:00 locales el día UTC ya cambió
+    const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Mexico_City' }));
     const hh = await post('/promotions', f.admin, { name: 'Happy Hour', type: 'HAPPY_HOUR', config: { percent: 20, categoryIds: [bebidas] }, schedule: { days: [day], from: '00:00', to: '23:59' } });
     expect(hh.status).toBe(201);
     const o = await order([item(f.prod.cola, { qty: 2 }), item(f.prod.burger)]);

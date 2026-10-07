@@ -82,13 +82,23 @@ export class PrintingService {
   receiptText(orderId: string, width = 42) { return this.db.tx(async (q) => renderReceipt(await this.receiptData(q, orderId), width)); }
   purchaseOrderText(po: Dict, width = 42) { return renderPurchaseOrder(po, width); }
 
+  /** Cola de una impresora. El alcance por sucursal se valida contra la impresora (no se leen trabajos de otra sucursal). */
   pending(printerId: string) {
-    return this.db.tx(async (q) => (await q.query(`SELECT id, kind, content, created_at AS "createdAt" FROM print_jobs WHERE printer_id=$1 AND status='PENDING' ORDER BY created_at LIMIT 50`, [printerId])).rows);
+    return this.db.tx(async (q) => {
+      const p = (await q.query('SELECT branch_id, columns, connection FROM printers WHERE id=$1', [printerId])).rows[0];
+      if (!p) throw notFound('printer');
+      if (!ctx().principal!.can('printing.manage', p.branch_id)) throw forbidden();
+      return (await q.query(`SELECT id, kind, content, attempts, created_at AS "createdAt" FROM print_jobs WHERE printer_id=$1 AND status='PENDING' ORDER BY created_at LIMIT 50`, [printerId])).rows;
+    });
   }
+  /** Confirma un trabajo. `ok=false` cuenta un intento (a los 3 queda FAILED). Idempotente. */
   ack(id: string, ok: boolean) {
     return this.db.tx(async (q) => {
+      const j = (await q.query('SELECT branch_id, status FROM print_jobs WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!j) throw notFound('print_job');
+      if (!ctx().principal!.can('printing.manage', j.branch_id)) throw forbidden();
+      if (j.status !== 'PENDING') return { id, status: j.status };   // idempotente: un segundo ack no reimprime ni revierte
       const r = await q.query(`UPDATE print_jobs SET status = CASE WHEN $2 THEN 'PRINTED' ELSE CASE WHEN attempts >= 2 THEN 'FAILED' ELSE 'PENDING' END END, attempts = attempts + 1, printed_at = CASE WHEN $2 THEN now() ELSE NULL END WHERE id=$1 RETURNING id, status`, [id, ok]);
-      if (!r.rows[0]) throw notFound('print_job');
       return r.rows[0];
     });
   }

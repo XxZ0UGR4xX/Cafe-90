@@ -43,7 +43,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 export const ROLE_KEYS = [
-  'SUPER_ADMIN', 'ADMIN', 'GERENTE', 'CAJERO', 'MESERO', 'COCINERO', 'ALMACEN', 'REPARTIDOR',
+  'SUPER_ADMIN', 'ADMIN', 'GERENTE', 'CAJERO', 'MESERO', 'COCINERO', 'ALMACEN', 'REPARTIDOR', 'IMPRESION',
 ] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
@@ -82,6 +82,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
       p === 'catalog.product.read' || p === 'reports.inventory.read' || p === 'notifications.read',
   ),
   REPARTIDOR: ['delivery.order.own', 'notifications.read'],
+  /** Cuenta de servicio del agente local de impresión (ESC/POS): sólo cola de impresión. */
+  IMPRESION: ['printing.manage'],
 };
 
 // Todo el personal necesita ver el nombre de su(s) sucursal(es) (alcance limitado por rol).
@@ -102,5 +104,5 @@ export const MFA_REQUIRED_ROLES: RoleKey[] = ['SUPER_ADMIN', 'ADMIN'];
 
 export const ROLE_LABELS: Record<RoleKey, string> = {
   SUPER_ADMIN: 'Super administrador', ADMIN: 'Administrador', GERENTE: 'Gerente', CAJERO: 'Cajero',
-  MESERO: 'Mesero', COCINERO: 'Cocinero', ALMACEN: 'Almacén', REPARTIDOR: 'Repartidor',
+  MESERO: 'Mesero', COCINERO: 'Cocinero', ALMACEN: 'Almacén', REPARTIDOR: 'Repartidor', IMPRESION: 'Agente de impresión',
 };
