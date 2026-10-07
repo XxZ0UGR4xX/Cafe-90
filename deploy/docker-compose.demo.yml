@@ -1,0 +1,64 @@
+# PRUEBAS REALES en tu equipo: todo el sistema con datos de demostración, sin TLS ni dominio. NO es para producción
+# (secretos de ejemplo, modo desarrollo, facturación SIMULADA). Uso:  ./scripts/demo.sh up   (ver docs/UAT.md)
+name: retroburger-demo
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment: { POSTGRES_PASSWORD: demo-admin, OWNER_PASSWORD: demo-owner, APP_PASSWORD: demo-app, BACKUP_PASSWORD: demo-backup }
+    volumes: [demodata:/var/lib/postgresql/data, ./init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh:ro]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 20 }
+
+  migrate:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    image: retroburger-api:demo
+    command: ["node", "dist/database/migrate.js"]
+    restart: "no"
+    environment: { DATABASE_MIGRATE_URL: "postgres://retroburger_owner:demo-owner@db:5432/retroburger" }
+    depends_on: { db: { condition: service_healthy } }
+
+  seed:                              # datos de demostración (3 sucursales, menú, inventario, 21 días de ventas); si ya existen no hace nada
+    image: retroburger-api:demo
+    command: ["node", "dist/database/seed.js"]
+    restart: "no"
+    environment: &apienv
+      NODE_ENV: development
+      DATABASE_URL: postgres://retroburger_app:demo-app@db:5432/retroburger
+      JWT_ACCESS_SECRET: demo-only-secret-demo-only-secret-0001
+      COOKIE_SECURE: "false"
+      CORS_ORIGINS: http://localhost:8080,http://localhost:8081
+      PUBLIC_WEB_URL: http://localhost:8081
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: "RetroBurger Demo <demo@retroburger.test>"
+      LOG_LEVEL: info
+    depends_on: { migrate: { condition: service_completed_successfully } }
+
+  api:
+    image: retroburger-api:demo
+    restart: unless-stopped
+    environment: *apienv
+    ports: ["127.0.0.1:3000:3000"]   # API + Swagger en http://localhost:3000/docs
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      seed: { condition: service_completed_successfully }
+
+  web-admin:
+    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-admin, VITE_API_URL: "http://localhost:3000" } }
+    image: retroburger-web-admin:demo
+    restart: unless-stopped
+    environment: { API_ORIGIN: "http://localhost:3000", API_WS_ORIGIN: "ws://localhost:3000" }
+    ports: ["127.0.0.1:8080:80"]     # admin / POS / KDS
+
+  web-public:
+    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-public, VITE_API_URL: "http://localhost:3000", VITE_TENANT: retroburger } }
+    image: retroburger-web-public:demo
+    restart: unless-stopped
+    environment: { API_ORIGIN: "http://localhost:3000", API_WS_ORIGIN: "ws://localhost:3000", PUBLIC_ORIGIN: "http://localhost:8081", ROBOTS_TAG: "noindex, nofollow" }
+    ports: ["127.0.0.1:8081:80"]     # sitio del cliente (menú, pedidos, reservas, puntos, autofactura)
+
+  mailpit:                           # opcional: ver los correos (facturas con XML, alertas) sin enviarlos de verdad.  ./scripts/demo.sh up --mail
+    profiles: [mail]
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports: ["127.0.0.1:8025:8025"]   # bandeja en http://localhost:8025 (SMTP interno: mailpit:1025)
+volumes: { demodata: {} }

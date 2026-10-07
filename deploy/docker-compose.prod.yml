@@ -45,8 +45,8 @@ services:
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?define MFA_ENCRYPTION_KEY (>=32 caracteres)}
       MFA_ENFORCE: ${MFA_ENFORCE:-true}
       COOKIE_SECURE: "true"
-      CORS_ORIGINS: https://${ADMIN_HOST},https://${PUBLIC_HOST}
-      PUBLIC_WEB_URL: https://${PUBLIC_HOST}
+      CORS_ORIGINS: https://${ADMIN_HOST:?define ADMIN_HOST},https://${PUBLIC_HOST:?define PUBLIC_HOST}
+      PUBLIC_WEB_URL: https://${PUBLIC_HOST:?define PUBLIC_HOST}
       SMTP_URL: ${SMTP_URL:-}
       MAIL_FROM: ${MAIL_FROM:-RetroBurger <no-reply@localhost>}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -59,22 +59,22 @@ services:
     networks: [internal, edge]
 
   web-admin:
-    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-admin, VITE_API_URL: "https://${API_HOST}" } }
+    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-admin, VITE_API_URL: "https://${API_HOST:?define API_HOST}" } }
     restart: unless-stopped
-    environment: { API_ORIGIN: "https://${API_HOST}", API_WS_ORIGIN: "wss://${API_HOST}" }
+    environment: { API_ORIGIN: "https://${API_HOST:?define API_HOST}", API_WS_ORIGIN: "wss://${API_HOST:?define API_HOST}" }
     networks: [edge]
 
   web-public:
-    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-public, VITE_API_URL: "https://${API_HOST}", VITE_TENANT: "${PUBLIC_TENANT:?define PUBLIC_TENANT (slug del restaurante)}" } }
+    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-public, VITE_API_URL: "https://${API_HOST:?define API_HOST}", VITE_TENANT: "${PUBLIC_TENANT:?define PUBLIC_TENANT (slug del restaurante)}" } }
     restart: unless-stopped
-    environment: { API_ORIGIN: "https://${API_HOST}", API_WS_ORIGIN: "wss://${API_HOST}", PUBLIC_ORIGIN: "https://${PUBLIC_HOST}", ROBOTS_TAG: "all" }", API_WS_ORIGIN: "wss://${API_HOST}" }
+    environment: { API_ORIGIN: "https://${API_HOST:?define API_HOST}", API_WS_ORIGIN: "wss://${API_HOST:?define API_HOST}", PUBLIC_ORIGIN: "https://${PUBLIC_HOST:?define PUBLIC_HOST}", ROBOTS_TAG: "all" }
     networks: [edge]
 
   proxy:                           # TLS automático (Let's Encrypt) y único servicio expuesto
     image: caddy:2
     restart: unless-stopped
     ports: ["80:80", "443:443"]
-    environment: { ADMIN_HOST: "${ADMIN_HOST}", PUBLIC_HOST: "${PUBLIC_HOST}", API_HOST: "${API_HOST}" }
+    environment: { ADMIN_HOST: "${ADMIN_HOST:?define ADMIN_HOST}", PUBLIC_HOST: "${PUBLIC_HOST:?define PUBLIC_HOST}", API_HOST: "${API_HOST:?define API_HOST}" }
     volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro, caddy_data:/data, caddy_config:/config]
     depends_on: [api, web-admin, web-public]
     networks: [edge]
