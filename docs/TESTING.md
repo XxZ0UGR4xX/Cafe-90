@@ -18,3 +18,7 @@ Para E2E: levantar API (`pnpm dev:api`), `pnpm dev:web`, `pnpm --filter @retrobu
 - `apps/api/src/modules/fiscal/fiscal.pure.test.ts`: catálogos SAT, normalización de nombre, aritmética (todos los montos 1¢–$600, 400 órdenes aleatorias con descuentos/tasas mixtas: total ±1¢ y traslados válidos), XML bien formado y escapado, factura global.
 - `apps/api/test/fiscal.test.ts` (BD real): emisión, duplicados, cancelación, inmutabilidad en BD, bloqueo de devolución con factura vigente, autofactura pública (código inválido, plazo, ya facturada, XML), factura global (reglas de día cerrado, no repetir, liberar al cancelar), permisos y aislamiento entre tenants.
 - E2E de navegador: `e2e/tests/invoice.spec.ts` (cobro → Facturar en Pedidos → timbre simulado, y autofactura en el sitio público).
+
+## Concurrencia, réplicas y carga
+- `stress.test.ts` (120 flujos simultáneos), `db-retry.test.ts` (deadlock real → reintento), `rate-limit-global.test.ts` (429 JSON, cubo por token), `redis.test.ts` (límite y WebSocket compartidos entre dos instancias; se omite sin `REDIS_URL`, en CI corre con un servicio redis). Ver `docs/PERFORMANCE.md`.
+- Local con Redis: `docker run -d -p 6379:6379 redis:7-alpine` y `REDIS_URL=redis://localhost:6379 pnpm --filter @retroburger/api test`.

@@ -28,6 +28,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       code = status === 404 ? 'NOT_FOUND' : status === 401 ? 'UNAUTHENTICATED' : status === 403 ? 'FORBIDDEN'
         : status === 429 ? 'RATE_LIMITED' : status === 400 ? 'VALIDATION_ERROR' : 'INTERNAL';
       message = errorMessage(code);
+    } else if (typeof err === 'object' && err && typeof (err as any).statusCode === 'number' && (err as any).statusCode >= 400 && (err as any).statusCode < 500) {
+      // Errores 4xx de plugins de Fastify (rate-limit 429, cuerpo demasiado grande 413, JSON inválido 400…): conservan su estado
+      status = (err as any).statusCode; retryable = status === 429 || status === 408;
+      code = status === 429 ? 'RATE_LIMITED' : status === 404 ? 'NOT_FOUND' : status === 401 ? 'UNAUTHENTICATED' : status === 403 ? 'FORBIDDEN' : 'VALIDATION_ERROR';
+      message = errorMessage(code);
     } else if (typeof err === 'object' && err && 'code' in err && typeof (err as any).code === 'string') {
       const pg = err as { code: string; constraint?: string };
       if (pg.code === '23505') { status = 409; code = 'CONFLICT'; retryable = false; message = errorMessage(code); details = { constraint: pg.constraint }; }

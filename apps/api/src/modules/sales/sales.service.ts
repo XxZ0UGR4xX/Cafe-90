@@ -219,6 +219,7 @@ export class SalesService {
       let authBy = ctx().principal!.userId;
       if (it.status !== 'PENDING') authBy = await this.supervisor.authorize('sales.order.cancel', o.branch_id, d.supervisor);
       const ids = (await q.query('SELECT id, status FROM order_items WHERE id=$1 OR parent_item_id=$1', [itemId])).rows;
+      await this.engine.lockForRefs(q, 'order_item', ids.map((r) => r.id));
       for (const row of ids) await this.cancelSentItem(q, row.id, row.status, d.reason);
       await q.query(`UPDATE order_items SET status='CANCELLED' WHERE id = ANY($1::uuid[])`, [ids.map((r) => r.id)]);
       await this.recalc(q, orderId);
@@ -379,6 +380,7 @@ export class SalesService {
   async voidOrder(q: Tx, o: Dict, reason: string, authorizedBy: string, refunded = false) {
     await this.assertNotInvoiced(q, o.id);
     const items = (await q.query(`SELECT id, status FROM order_items WHERE order_id=$1 AND ${ACTIVE_ITEM}`, [o.id])).rows;
+    await this.engine.lockForRefs(q, 'order_item', items.map((r) => r.id));   // mismo orden de bloqueo que las ventas (evita deadlocks)
     for (const it of items) await this.cancelSentItem(q, it.id, it.status, reason);
     await q.query(`UPDATE order_items SET status='CANCELLED' WHERE order_id=$1`, [o.id]);
     await q.query(`UPDATE kitchen_orders SET status='CANCELLED' WHERE order_id=$1 AND status IN ('NEW','PREPARING','READY')`, [o.id]);

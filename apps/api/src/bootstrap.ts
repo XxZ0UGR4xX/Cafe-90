@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -55,7 +55,12 @@ export async function createApp(): Promise<NestFastifyApplication> {
   await app.register(fastifyCookie as any);
   // Con Redis el límite global se comparte entre réplicas; si Redis cae, no se bloquea el tráfico (skipOnError)
   const redis = app.get<RedisClient>(REDIS);
-  await app.register(fastifyRateLimit as any, { max: env.RATE_LIMIT_MAX, timeWindow: '1 minute', ...(redis ? { redis, nameSpace: 'rl:global:', skipOnError: true } : {}) });
+  await app.register(fastifyRateLimit as any, {
+    timeWindow: '1 minute',
+    // Sesiones autenticadas: un cubo por token (el restaurante entero comparte una IP pública: limitar por IP bloquearía las tablets entre sí).
+    keyGenerator: (req: { ip: string; headers: Record<string, unknown> }) => { const a = String(req.headers.authorization ?? ''); return a.startsWith('Bearer ') ? `t:${createHash('sha256').update(a).digest('hex').slice(0, 24)}` : `ip:${req.ip}`; },
+    max: (_req: unknown, key: string) => (key.startsWith('t:') ? env.RATE_LIMIT_AUTH_MAX : env.RATE_LIMIT_MAX),
+    ...(redis ? { redis, nameSpace: 'rl:global:', skipOnError: true } : {}) });
 
   if (env.NODE_ENV !== 'production') {
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder()

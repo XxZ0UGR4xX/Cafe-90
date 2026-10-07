@@ -13,7 +13,10 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
   LOG_LEVEL: z.string().default('info'),
+  /** Límite global por minuto para peticiones SIN sesión (por IP). */
   RATE_LIMIT_MAX: z.coerce.number().default(300),
+  /** Límite por minuto para cada sesión autenticada (por token): varias tablets tras la misma IP del restaurante no se bloquean entre sí. */
+  RATE_LIMIT_AUTH_MAX: z.coerce.number().default(1200),
   JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
   PUBLIC_RATE_LIMIT_MAX: z.coerce.number().default(30),
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().default(10),

@@ -45,6 +45,20 @@ export class InventoryEngine {
     for (const id of [...new Set(ingredientIds)].sort()) await this.lockRow(q, branchId, id);
   }
 
+  /**
+   * Bloquea, en el MISMO orden global que las ventas (por id de insumo), todas las filas de inventario que tocarán las reversas de
+   * unos documentos. Sin esto, una cancelación que revierte item por item toma los bloqueos en otro orden que una venta
+   * concurrente y ambas se interbloquean (deadlock detectado por la prueba de estrés).
+   */
+  async lockForRefs(q: Tx, refType: string, refIds: string[]): Promise<void> {
+    if (!refIds.length) return;
+    const rows = (await q.query(
+      `SELECT DISTINCT branch_id, ingredient_id FROM inventory_movements WHERE ref_type = $1 AND ref_id = ANY($2::uuid[]) AND type IN ('SALE_OUT','SALE_REVERSAL')`, [refType, refIds])).rows;
+    const byBranch = new Map<string, string[]>();
+    for (const r of rows) byBranch.set(r.branch_id, [...(byBranch.get(r.branch_id) ?? []), r.ingredient_id]);
+    for (const [branchId, ids] of [...byBranch.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) await this.lockMany(q, branchId, ids);
+  }
+
   async apply(q: Tx, m: MovementInput): Promise<{ balance: number; movementId: string }> {
     if (!m.qty) throw new AppError('VALIDATION_ERROR', 400, { field: 'qty' });
     const row = await this.lockRow(q, m.branchId, m.ingredientId);

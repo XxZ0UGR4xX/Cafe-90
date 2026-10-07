@@ -5,3 +5,4 @@ process.env.DATABASE_MIGRATE_URL ??= 'postgres://retroburger_owner:owner_dev@loc
 process.env.JWT_ACCESS_SECRET ??= 'test-secret-test-secret-test-secret-123456';
 process.env.LOGIN_RATE_LIMIT_MAX ??= '1000';
 process.env.RATE_LIMIT_MAX ??= '100000';
+process.env.RATE_LIMIT_AUTH_MAX ??= '1000000';

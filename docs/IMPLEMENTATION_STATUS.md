@@ -37,5 +37,8 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Facturación CFDI 4.0 (México) | 🟡 | Flujo completo: perfil fiscal, factura por ticket, autofactura pública con código del ticket, factura global, cancelación con motivo SAT, XML. **Proveedor SIMULADO** (sin validez fiscal): falta conectar un PAC real — ver `docs/FISCAL.md` |
 | CI/CD, Docker, despliegue | 🟡 | **Imágenes de producción** (API no-root con healthcheck; webs en nginx con CSP) construidas y probadas; **stack completo** `deploy/docker-compose.prod.yml` (BD interna, migración previa, Caddy con TLS) levantado y verificado (login, 2FA obligatorio, webs); alta de restaurante sin demo (`provision`); **respaldo cifrado + restauración + verificación** probados (descubierto y resuelto: con RLS forzada el respaldo exige un rol BYPASSRLS); CI construye las imágenes; auditoría de dependencias semanal (0 vulnerabilidades tras subir fastify/react-router). Falta CD, prueba en servidor real y monitoreo — ver `docs/DEPLOY.md` |
 
+## Rendimiento
+Ver `docs/PERFORMANCE.md`: prueba de estrés de correctitud en CI (encontró y corrigió un deadlock; reintento automático de transacciones), prueba de carga manual (~17 ventas/s por sucursal en un entorno de 4 vCPU), límite de peticiones por sesión (corregido 429→500).
+
 ## Seguridad pendiente antes de producción
 **Activar `MFA_ENFORCE=true` y definir `MFA_ENCRYPTION_KEY` (obligatoria en producción)**; rotación de la clave MFA (hoy no hay re-cifrado), rotación de secretos, CSP/headers del frontend servidos por el proxy, gestión de secretos fuera de `.env`, escaneo de imágenes, monitoreo/alertas, pentest.

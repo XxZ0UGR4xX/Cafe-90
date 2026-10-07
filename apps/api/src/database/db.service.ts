@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { ENV, type Env } from '../config/env';
 import { ctx, requestContext } from '../common/request-context';
@@ -14,9 +14,12 @@ types.setTypeParser(1700, (v) => parseFloat(v));
 types.setTypeParser(20, (v) => parseInt(v, 10));
 types.setTypeParser(1082, (v) => v);   // date → 'YYYY-MM-DD' (sin conversión de zona horaria)
 
+const MAX_TX_ATTEMPTS = 4;
+
 @Injectable()
 export class DbService implements OnModuleDestroy {
   readonly pool: Pool;
+  private readonly log = new Logger('Db');
 
   constructor(@Inject(ENV) env: Env) {
     this.pool = new Pool({ connectionString: env.DATABASE_URL, max: 20, idleTimeoutMillis: 30_000 });
@@ -31,6 +34,19 @@ export class DbService implements OnModuleDestroy {
     if (c.tx && (!tenantId || tenantId === c.tenantId)) return fn(c.tx);
     const tid = tenantId ?? c.tenantId;
     if (!tid) throw forbidden({ reason: 'tenant context missing' });
+    // Deadlock (40P01) o fallo de serialización (40001): PostgreSQL aborta UNA de las transacciones y es seguro repetirla desde cero
+    // (todo se revirtió y los efectos post-commit aún no corrieron). Se reintenta con espera aleatoria corta antes de rendirse.
+    for (let attempt = 1; ; attempt++) {
+      try { return await this.runTx(fn, tid, c); }
+      catch (e) {
+        const code = (e as { code?: string }).code;
+        if ((code === '40P01' || code === '40001') && attempt < MAX_TX_ATTEMPTS) { this.log.warn(`transacción reintentada (${code}, intento ${attempt}/${MAX_TX_ATTEMPTS})`); await new Promise((r) => setTimeout(r, 15 + Math.random() * 45 * attempt)); continue; }
+        throw e;
+      }
+    }
+  }
+
+  private async runTx<T>(fn: (q: Tx) => Promise<T>, tid: string, c: ReturnType<typeof ctx>): Promise<T> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
