@@ -189,3 +189,15 @@ button { font-family: inherit; }
   .rb-print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 16px; background: #fff; color: #000; }
   .rb-print-area .rb-btn { display: none !important; }
 }
+
+/* Plano del restaurante (mesas posicionadas en cuadrícula; editable con arrastrar y soltar) */
+.rb-plan-scroll { overflow: auto; border: var(--border); border-radius: var(--radius); background: var(--cream-2); max-width: 100%; }
+.rb-plan { position: relative; background-image: linear-gradient(to right, rgba(17,17,17,.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(17,17,17,.07) 1px, transparent 1px); background-position: 8px 8px; }
+.rb-plan[data-editing='true'] { outline: 3px dashed var(--mustard); outline-offset: -3px; }
+.rb-plan__table { --st: var(--neon-dark); position: absolute; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: 6px; overflow: hidden; text-align: center; background: var(--paper); border: var(--border); border-bottom: 10px solid var(--st); border-radius: var(--radius); box-shadow: var(--shadow-sm); font: inherit; color: inherit; user-select: none; transition: box-shadow .1s; }
+.rb-plan__table[data-status='OCCUPIED'] { --st: var(--ketchup); } .rb-plan__table[data-status='RESERVED'] { --st: var(--mustard); } .rb-plan__table[data-status='CLEANING'] { --st: var(--blue); }
+.rb-plan__table[data-round='true'] { border-radius: 40px 12px 40px 12px; }
+.rb-plan__table .num { font-family: var(--font-display); font-size: 1.7rem; line-height: 1; } .rb-plan__table .st { font-size: .72rem; font-weight: 700; } .rb-plan__table .who { font-size: .7rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-plan__table[data-dragging='true'] { z-index: 5; box-shadow: var(--shadow); transition: none; cursor: grabbing !important; opacity: .92; }
+.rb-plan__table[data-blocked='true'] { outline: 4px solid var(--ketchup); background: #ffd9d9; }
+.rb-plan__table:focus-visible { outline: 4px solid var(--blue); outline-offset: 2px; }

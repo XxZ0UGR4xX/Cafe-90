@@ -43,6 +43,22 @@ export class FloorService {
     }).catch((e) => { if (e.code === '23505') throw conflict({ field: 'number' }, '⚠️ Ya existe una mesa con ese número.'); throw e; });
   }
 
+  /** Reubica una mesa en el plano (arrastrar y soltar). Valida límites y que no se encime con otra mesa activa de la sucursal. */
+  position(branchId: string, id: string, x: number, y: number) {
+    this.assertBranch('floor.table.write', branchId);
+    return this.db.tx(async (q) => {
+      const t = (await q.query('SELECT id, number, x, y, w, h FROM tables WHERE id=$1 AND branch_id=$2 AND is_active FOR UPDATE', [id, branchId])).rows[0];
+      if (!t) throw notFound('table');
+      const clash = (await q.query(
+        `SELECT number FROM tables WHERE branch_id=$1 AND is_active AND id <> $2 AND NOT ($3 >= x + w OR $3 + $5 <= x OR $4 >= y + h OR $4 + $6 <= y) ORDER BY number LIMIT 1`,
+        [branchId, id, x, y, t.w, t.h])).rows[0];
+      if (clash) throw conflict({ clashWith: clash.number }, `⚠️ Ahí ya está la mesa ${clash.number}. Elige un lugar libre.`);
+      await q.query('UPDATE tables SET x=$2, y=$3 WHERE id=$1', [id, x, y]);
+      await this.audit.record(q, { action: 'table.reposition', entity: 'table', entityId: id, branchId, oldValue: { x: t.x, y: t.y }, newValue: { x, y } });
+      return { id, x, y };
+    });
+  }
+
   remove(branchId: string, id: string) {
     this.assertBranch('floor.table.write', branchId);
     return this.db.tx(async (q) => {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -7,6 +7,7 @@ import { Require } from '../identity/access.decorators';
 import { FloorService } from './floor.service';
 
 class TableBody extends createZodDto(TableDto) {}
+class PositionBody extends createZodDto(z.object({ x: z.number().int().min(0).max(60), y: z.number().int().min(0).max(60) })) {}
 class TableOpenBody extends createZodDto(TableOpenDto) {}
 class MoveBody extends createZodDto(TableMoveDto) {}
 class MergeBody extends createZodDto(TableMergeDto) {}
@@ -21,6 +22,7 @@ export class FloorController {
   @Get('tables') @Require('floor.table.read') list(@Query() q: FloorBranchQuery) { return this.svc.list(q.branchId); }
   @Post('branches/:branchId/tables') @Require('floor.table.write') create(@Param('branchId', id) b: string, @Body() d: TableBody) { return this.svc.save(b, null, d); }
   @Put('branches/:branchId/tables/:id') @Require('floor.table.write') update(@Param('branchId', id) b: string, @Param('id', id) i: string, @Body() d: TableBody) { return this.svc.save(b, i, d); }
+  @Patch('branches/:branchId/tables/:id/position') @Require('floor.table.write') reposition(@Param('branchId', id) b: string, @Param('id', id) i: string, @Body() d: PositionBody) { return this.svc.position(b, i, d.x, d.y); }
   @Delete('branches/:branchId/tables/:id') @HttpCode(204) @Require('floor.table.write') async remove(@Param('branchId', id) b: string, @Param('id', id) i: string) { await this.svc.remove(b, i); }
   @Post('tables/:id/open') @Require('floor.table.operate') open(@Param('id', id) i: string, @Body() d: TableOpenBody) { return this.svc.open(i, d); }
   @Post('tables/:id/move') @Require('floor.table.operate') move(@Param('id', id) i: string, @Body() d: MoveBody) { return this.svc.move(i, d.toTableId); }

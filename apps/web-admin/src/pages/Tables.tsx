@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { RetroBadge, RetroButton, RetroCard, RetroDialog, RetroInput, RetroModal, RetroSelect, RetroStatCard, RetroTableCard, formatMoney, mmss } from '@retroburger/ui';
-import { post, del } from '../app/api';
+import { post, put, patch, del } from '../app/api';
+import { FloorPlan } from './floor/FloorPlan';
+import { firstFree } from './floor/plan';
+import { useToast } from '@retroburger/ui';
 import { useAct, useGet } from '../app/hooks';
 import { useSession } from '../app/auth';
 import { useCart } from './pos/cart';
@@ -20,8 +23,10 @@ function TablesInner({ branchId }: { branchId: string }) {
   const open = act(() => post(`/tables/${sel.id}/open`, { guests: num(guests) || 1 }), 'Mesa abierta'); const move = act(() => post(`/tables/${sel.id}/move`, { toTableId: target }), 'Cuenta movida');
   const mergeM = act(() => post(`/tables/${sel.id}/merge`, { tableIds: merge }), 'Mesas unidas'); const transfer = act(() => post(`/tables/${sel.id}/transfer`, { waiterId: target }), 'Mesa transferida');
   const release = act(() => post(`/tables/${sel.id}/release`), 'Mesa liberada'); const clean = act(() => post(`/tables/${sel.id}/clean`), 'Mesa lista 🟢');
-  const save = useAct(() => (edit.id ? post(`/branches/${branchId}/tables/${edit.id}`, edit) : post(`/branches/${branchId}/tables`, { ...edit, number: num(edit.number), capacity: num(edit.capacity) || 4 })), { invalidate: inv, onSuccess: () => setMode(null), ok: 'Mesa guardada' });
+  const save = useAct(() => (edit.id ? put(`/branches/${branchId}/tables/${edit.id}`, { number: num(edit.number), capacity: num(edit.capacity) || 4, shape: edit.shape ?? 'SQUARE', x: edit.x ?? 0, y: edit.y ?? 0, w: edit.w ?? 1, h: edit.h ?? 1, isActive: edit.isActive ?? true }) : post(`/branches/${branchId}/tables`, { ...edit, number: num(edit.number), capacity: num(edit.capacity) || 4 })), { invalidate: inv, onSuccess: () => setMode(null), ok: 'Mesa guardada' });
   const tables = (q.data ?? []).filter((t) => t.isActive);
+  const toast = useToast(); const [view, setView] = useState<'cards' | 'plan'>('cards'); const [editPlan, setEditPlan] = useState(false);
+  const reposition = useAct(({ id, x, y }: { id: string; x: number; y: number }) => patch(`/branches/${branchId}/tables/${id}/position`, { x, y }), { invalidate: inv });
   const count = (s: string) => tables.filter((t) => t.status === s).length;
   const free = tables.filter((t) => t.status === 'FREE' && t.id !== sel?.id);
 
@@ -35,8 +40,14 @@ function TablesInner({ branchId }: { branchId: string }) {
         <RetroStatCard label="Libres" value={count('FREE')} icon="🟢" accent="var(--neon-dark)" /><RetroStatCard label="Ocupadas" value={count('OCCUPIED')} icon="🔴" accent="var(--ketchup)" />
         <RetroStatCard label="Reservadas" value={count('RESERVED')} icon="🟡" accent="var(--mustard)" /><RetroStatCard label="En limpieza" value={count('CLEANING')} icon="🔵" accent="var(--blue)" />
       </div>
-      <RetroCard title="🗺️ Mapa del restaurante" actions={can('floor.table.write', branchId) ? <RetroButton size="sm" variant="neon" onClick={() => { setEdit({ capacity: 4, shape: 'SQUARE', x: 0, y: 0, w: 1, h: 1, isActive: true, number: (Math.max(0, ...tables.map((t) => t.number)) + 1) }); setMode('edit'); }}>+ Mesa</RetroButton> : undefined}>
-        <div className="rb-floor">{tables.map((t) => <RetroTableCard key={t.id} number={t.number} capacity={t.capacity} status={t.status} customer={t.customerName ?? t.waiterName} seconds={t.occupiedSeconds} total={Number(t.currentTotal)} round={t.shape === 'ROUND'} onClick={() => setSel(t)} extra={t.reservation ? <span className="rb-hint">📅 {t.reservation.customerName}</span> : null} />)}</div>
+      <RetroCard title="🗺️ Mapa del restaurante" actions={<span className="rb-row">
+        <RetroButton size="sm" variant={view === 'cards' ? 'mustard' : 'white'} onClick={() => { setView('cards'); setEditPlan(false); }}>▦ Tarjetas</RetroButton>
+        <RetroButton size="sm" variant={view === 'plan' ? 'mustard' : 'white'} onClick={() => setView('plan')}>🗺️ Plano</RetroButton>
+        {can('floor.table.write', branchId) && view === 'plan' && <RetroButton size="sm" variant={editPlan ? 'red' : 'white'} onClick={() => setEditPlan(!editPlan)}>{editPlan ? '✔ Terminar edición' : '✏️ Editar plano'}</RetroButton>}
+        {can('floor.table.write', branchId) && <RetroButton size="sm" variant="neon" onClick={() => { const p = firstFree(tables.map((t) => ({ id: t.id, x: t.x, y: t.y, w: t.w, h: t.h }))); setEdit({ capacity: 4, shape: 'SQUARE', x: p.x, y: p.y, w: 1, h: 1, isActive: true, number: (Math.max(0, ...tables.map((t) => t.number)) + 1) }); setMode('edit'); }}>+ Mesa</RetroButton>}</span>}>
+        {editPlan && <p className="rb-hint" style={{ marginTop: 0 }}>Arrastra las mesas (o enfócalas y usa las flechas del teclado). Se guardan solas y no pueden encimarse.</p>}
+        {view === 'plan' ? <FloorPlan tables={tables.map((t) => ({ id: t.id, x: t.x, y: t.y, w: t.w, h: t.h, number: t.number, capacity: t.capacity, status: t.status, shape: t.shape, customer: t.customerName ?? t.waiterName }))} editable={editPlan} onSelect={(pt) => setSel(tables.find((t) => t.id === pt.id) ?? null)} onMove={(pt, x, y) => reposition.mutate({ id: pt.id, x, y })} onBlocked={(pt) => toast.error(`⚠️ Ahí no cabe la mesa ${pt.number}: ya hay otra. Elige un lugar libre.`)} />
+          : <div className="rb-floor">{tables.map((t) => <RetroTableCard key={t.id} number={t.number} capacity={t.capacity} status={t.status} customer={t.customerName ?? t.waiterName} seconds={t.occupiedSeconds} total={Number(t.currentTotal)} round={t.shape === 'ROUND'} onClick={() => setSel(t)} extra={t.reservation ? <span className="rb-hint">📅 {t.reservation.customerName}</span> : null} />)}</div>}
       </RetroCard>
 
       <RetroModal open={!!sel && !mode} onClose={() => setSel(null)} title={`Mesa ${sel?.number ?? ''}`} size="sm">

@@ -21,7 +21,7 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Inventario (kardex, lotes FEFO, mermas, ajustes, conteo físico, transferencias, alertas) | ✅ | conciliación kardex↔saldo probada; falta job de conciliación nocturna |
 | Compras (proveedores, cotización, OC, aprobación, recepción parcial, factura con cotejo) | ✅ | cuentas por pagar básico |
 | POS / pedidos / pagos mixtos / propinas / descuentos / división / cancelación / devolución | ✅ | autorización de supervisor por PIN |
-| Mesas y reservaciones | ✅ | mapa en cuadrícula (no arrastrable); anti-empalme por constraint |
+| Mesas y reservaciones | ✅ | **plano editable con arrastrar y soltar** (ratón, táctil y flechas del teclado; ajuste a cuadrícula, no se encima con otra mesa —validado también en el servidor—, auditado) + vista de tarjetas; reservaciones con anti-empalme por constraint |
 | KDS (estaciones, SLA por color, tiempo real) | ✅ | WebSocket por sala de sucursal |
 | Caja (turnos, conteo ciego, retiros/gastos, corte) | ✅ | |
 | CRM, lealtad (ledger inmutable), promociones (2×1, %, fijo, happy hour, cupón, cumpleaños, puntos dobles) | ✅ | umbrales de segmentos fijos en código |
