@@ -2,13 +2,14 @@ import { Inject, Injectable, Logger, OnApplicationShutdown, OnModuleInit } from 
 import { ENV, type Env } from '../../config/env';
 import { DbService } from '../../database/db.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReconciliationService } from '../inventory/reconciliation.service';
 
 /** Tareas periódicas por tenant: alertas de reservación, corte pendiente, pedidos retrasados y caducidades. */
 @Injectable()
 export class JobsService implements OnModuleInit, OnApplicationShutdown {
   private timer?: NodeJS.Timeout;
   private readonly log = new Logger('Jobs');
-  constructor(private readonly db: DbService, private readonly notifications: NotificationsService, @Inject(ENV) private readonly env: Env) {}
+  constructor(private readonly db: DbService, private readonly notifications: NotificationsService, private readonly recon: ReconciliationService, @Inject(ENV) private readonly env: Env) {}
 
   onModuleInit() {
     if (this.env.JOBS_ENABLED === 'true' && this.env.NODE_ENV !== 'test') {
@@ -21,8 +22,30 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
   async runOnce(): Promise<{ tenants: number; notifications: number }> {
     const tenants = (await this.db.system<{ id: string }>('SELECT list_active_tenants() AS id')).rows.map((r) => r.id);
     let n = 0;
-    for (const t of tenants) n += await this.db.tx((q) => this.forTenant(q), t);
+    for (const t of tenants) {
+      n += await this.db.tx((q) => this.forTenant(q), t);
+      // conciliación nocturna (≈ 03:00 hora de México = 09:00 UTC); una vez por día y tenant aunque haya varias instancias
+      if (new Date().getUTCHours() === 9) await this.nightly(t).catch((e) => this.log.error(e));
+    }
     return { tenants: tenants.length, notifications: n };
+  }
+
+  /** Tareas diarias de un tenant. Idempotente: `job_runs` reclama el día con INSERT … ON CONFLICT DO NOTHING. */
+  async nightly(tenantId: string, force = false): Promise<{ ran: boolean; findings: number }> {
+    return this.db.tx(async (q) => {
+      const day = new Date().toISOString().slice(0, 10);
+      const claimed = (await q.query(
+        `INSERT INTO job_runs (tenant_id, job, run_on) VALUES (app_tenant_id(), 'inventory.reconcile', $1::date)
+         ON CONFLICT (tenant_id, job, run_on) DO ${force ? "UPDATE SET started_at = now(), finished_at = NULL" : 'NOTHING'} RETURNING 1`, [day])).rowCount;
+      if (!claimed) return { ran: false, findings: 0 };
+      const findings = await this.recon.check(q);
+      for (const f of findings.filter((x) => x.kind !== 'NEGATIVE_STOCK'))
+        await this.notifications.emit(q, { type: 'INVENTORY_INTEGRITY', severity: f.severity, branchId: f.branchId,
+          title: `🧮 Inventario descuadrado: ${f.ingredient}`, body: f.detail, payload: f, dedupeKey: `recon:${f.kind}:${f.branchId}:${f.ingredientId}:${day}` });
+      await q.query(`UPDATE job_runs SET finished_at = now(), result = $1 WHERE job = 'inventory.reconcile' AND run_on = $2::date`,
+        [JSON.stringify({ findings: findings.length, critical: findings.filter((f) => f.severity === 'CRITICAL').length }), day]);
+      return { ran: true, findings: findings.length };
+    }, tenantId);
   }
 
   private async forTenant(q: import('../../database/db.service').Tx): Promise<number> {

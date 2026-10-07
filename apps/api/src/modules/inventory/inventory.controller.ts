@@ -5,6 +5,10 @@ import { z } from 'zod';
 import { CountDto, CountSubmitDto, MovementDto, StockLevelDto, TransferDto } from '@retroburger/shared';
 import { Require } from '../identity/access.decorators';
 import { InventoryService } from './inventory.service';
+import { ReconciliationService } from './reconciliation.service';
+import { DbService } from '../../database/db.service';
+import { ctx } from '../../common/request-context';
+import { forbidden } from '../../common/errors';
 
 class InventoryMovementBody extends createZodDto(MovementDto) {}
 class LevelBody extends createZodDto(StockLevelDto) {}
@@ -24,10 +28,17 @@ const id = new ParseUUIDPipe();
 @ApiTags('inventory')
 @Controller()
 export class InventoryController {
-  constructor(private readonly svc: InventoryService) {}
+  constructor(private readonly svc: InventoryService, private readonly recon: ReconciliationService, private readonly db: DbService) {}
 
   @Get('inventory') @Require('inventory.stock.read') stock(@Query() q: StockQuery) { return this.svc.stock(q.branchId, q.status); }
   @Get('inventory/kardex') @Require('inventory.stock.read') kardex(@Query() q: KardexQuery) { return this.svc.kardex(q); }
+  /** Conciliación kardex ↔ saldo ↔ lotes de una sucursal (la misma que corre cada noche). */
+  @Get('inventory/reconciliation') @Require('inventory.stock.read') async reconciliation(@Query() q: TransferQuery) {
+    if (q.branchId && !ctx().principal!.can('inventory.stock.read', q.branchId)) throw forbidden();
+    const findings = await this.db.tx((tx) => this.recon.check(tx, q.branchId));
+    const scope = ctx().principal!.branchScope('inventory.stock.read');
+    return { checkedAt: new Date().toISOString(), ok: findings.every((f) => f.severity !== 'CRITICAL'), findings: scope ? findings.filter((f) => scope.includes(f.branchId)) : findings };
+  }
   @Get('inventory/expiring') @Require('inventory.stock.read') expiring(@Query() q: ExpQuery) { return this.svc.expiring(q.branchId, q.days); }
   @Post('inventory/movements') @Require('inventory.movement.write') move(@Body() b: InventoryMovementBody) { return this.svc.move(b); }
   @Put('inventory/levels') @Require('inventory.movement.write') levels(@Body() b: LevelBody) { return this.svc.setLevels(b); }

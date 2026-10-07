@@ -5,7 +5,7 @@ import { useAct, useGet } from '../app/hooks';
 import { useSession } from '../app/auth';
 import { Async, FormModal, INV_STATUS, NeedBranch, Row, StatusBadge, fmtDate, num } from './common';
 
-type Tab = 'stock' | 'kardex' | 'counts' | 'transfers' | 'expiring';
+type Tab = 'stock' | 'kardex' | 'counts' | 'transfers' | 'expiring' | 'integrity';
 export default function Inventory() { return <NeedBranch>{(b) => <Inner branchId={b} />}</NeedBranch>; }
 
 function Inner({ branchId }: { branchId: string }) {
@@ -14,6 +14,7 @@ function Inner({ branchId }: { branchId: string }) {
   const [mv, setMv] = useState<any | null>(null); const [lv, setLv] = useState<any | null>(null); const [kIng, setKIng] = useState('');
   const kardex = useGet<any[]>(['inventory', 'kardex', branchId, kIng], '/inventory/kardex', { branchId, ingredientId: kIng || undefined, limit: 100 }, { enabled: tab === 'kardex' });
   const transfers = useGet<any[]>(['inventory', 'transfers', branchId], '/transfers', { branchId }, { enabled: tab === 'transfers' });
+  const recon = useGet<any>(['inventory', 'recon', branchId], '/inventory/reconciliation', { branchId }, { enabled: tab === 'integrity' });
   const exp = useGet<any[]>(['inventory', 'exp', branchId], '/inventory/expiring', { branchId, days: 14 }, { enabled: tab === 'expiring' });
   const branches = useGet<any[]>(['branches'], '/branches'); const ingredients = useGet<any[]>(['ingredients'], '/ingredients');
   const [tf, setTf] = useState<any | null>(null); const [count, setCount] = useState<any | null>(null);
@@ -29,7 +30,7 @@ function Inner({ branchId }: { branchId: string }) {
   const canWrite = can('inventory.movement.write', branchId);
   return (
     <>
-      <RetroTabs value={tab} onChange={setTab} tabs={[{ key: 'stock', label: '📦 Existencias' }, { key: 'kardex', label: '📒 Kardex' }, { key: 'counts', label: '🧮 Inventario físico' }, { key: 'transfers', label: '🔁 Transferencias' }, { key: 'expiring', label: '⏳ Caducidades' }]} />
+      <RetroTabs value={tab} onChange={setTab} tabs={[{ key: 'stock', label: '📦 Existencias' }, { key: 'kardex', label: '📒 Kardex' }, { key: 'counts', label: '🧮 Inventario físico' }, { key: 'transfers', label: '🔁 Transferencias' }, { key: 'expiring', label: '⏳ Caducidades' }, { key: 'integrity', label: '🧮 Integridad' }]} />
       {tab === 'stock' && <>
         <div className="rb-row rb-wrap"><RetroSelect aria-label="Estado" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: 'Todos los estados' }, { value: 'AVAILABLE', label: '🟢 Normal' }, { value: 'LOW', label: '🟡 Bajo' }, { value: 'CRITICAL', label: '🔴 Crítico' }, { value: 'OUT_OF_STOCK', label: '⚫ Agotado' }]} />
           {can('reports.corporate.read') && <label className="rb-check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />Ver todas las sucursales</label>}
@@ -46,6 +47,7 @@ function Inner({ branchId }: { branchId: string }) {
       {tab === 'transfers' && <><div className="rb-row"><RetroButton variant="neon" onClick={() => setTf({ from: '', ingredientId: '', qty: '' })}>+ Solicitar transferencia a esta sucursal</RetroButton></div>
         <Async q={transfers}><RetroTable rows={transfers.data ?? []} columns={[{ key: 'n', header: '#', render: (r: any) => r.number }, { key: 'f', header: 'Origen', render: (r: any) => branches.data?.find((b) => b.id === r.fromBranchId)?.name ?? '—' }, { key: 't', header: 'Destino', render: (r: any) => branches.data?.find((b) => b.id === r.toBranchId)?.name ?? '—' }, { key: 's', header: 'Estado', render: (r: any) => <RetroBadge tone={r.status === 'RECEIVED' ? 'ok' : r.status === 'CANCELLED' ? 'danger' : 'info'}>{r.status}</RetroBadge> }, { key: 'at', header: 'Fecha', render: (r: any) => fmtDate(r.createdAt) },
           { key: 'a', header: 'Acciones', render: (r: any) => <span className="rb-row rb-wrap">{r.status === 'REQUESTED' && can('inventory.transfer.approve') && <RetroButton size="sm" variant="neon" onClick={() => tfAct.mutate({ id: r.id, a: 'approve' })}>Aprobar</RetroButton>}{r.status === 'APPROVED' && <RetroButton size="sm" variant="mustard" onClick={() => tfAct.mutate({ id: r.id, a: 'dispatch' })}>Despachar</RetroButton>}{r.status === 'IN_TRANSIT' && <RetroButton size="sm" variant="neon" onClick={() => tfAct.mutate({ id: r.id, a: 'receive' })}>Recibir</RetroButton>}{['REQUESTED', 'APPROVED', 'IN_TRANSIT'].includes(r.status) && <RetroButton size="sm" variant="ghost" onClick={() => tfAct.mutate({ id: r.id, a: 'cancel' })}>Cancelar</RetroButton>}</span> }]} /></Async></>}
+      {tab === 'integrity' && <Async q={recon}><RetroCard title="🧮 Conciliación kardex ↔ saldo ↔ lotes" tone={recon.data?.ok ? 'plain' : 'red'} actions={<RetroButton size="sm" variant="white" onClick={() => void recon.refetch()}>↻ Revisar ahora</RetroButton>}><p style={{ marginTop: 0 }}>{recon.data?.findings.length ? (recon.data.ok ? 'Hay advertencias por revisar.' : '⚠️ Hay diferencias entre el saldo y el kardex. Avisa a administración antes de seguir operando ese insumo.') : '✅ Todo cuadra: el saldo de cada insumo coincide con su kardex. Se revisa automáticamente cada noche.'}</p>{recon.data?.findings.length > 0 && <RetroTable rows={recon.data.findings} rowKey={(r: any) => r.kind + r.ingredientId} columns={[{ key: 'i', header: 'Insumo', render: (r: any) => r.ingredient }, { key: 'k', header: 'Hallazgo', render: (r: any) => <RetroBadge tone={r.severity === 'CRITICAL' ? 'danger' : 'warn'}>{r.kind}</RetroBadge> }, { key: 'd', header: 'Detalle', render: (r: any) => r.detail }]} />}</RetroCard></Async>}
       {tab === 'expiring' && <Async q={exp}><RetroTable rows={exp.data ?? []} columns={[{ key: 'i', header: 'Insumo', render: (r: any) => r.ingredient }, { key: 'l', header: 'Lote', render: (r: any) => r.lotCode ?? '—' }, { key: 'e', header: 'Caduca', render: (r: any) => String(r.expiresOn).slice(0, 10) }, { key: 'd', header: 'Días', numeric: true, render: (r: any) => <RetroBadge tone={r.daysLeft <= 2 ? 'danger' : 'warn'}>{r.daysLeft}</RetroBadge> }, { key: 'q', header: 'Cantidad', numeric: true, render: (r: any) => `${r.qty} ${r.unit}` }]} empty="Sin caducidades en 14 días 🎉" /></Async>}
 
       <FormModal open={!!mv} onClose={() => setMv(null)} title={mv?.type === 'PURCHASE_IN' ? '⬇️ Entrada de mercancía' : mv?.type === 'WASTE' ? '🗑 Merma' : '± Ajuste'} busy={move.isPending} disabled={!mv?.ingredientId || !num(mv?.qty ?? '0')} onSubmit={() => move.mutate()}>
