@@ -183,12 +183,13 @@ export class AuthService {
   async me() {
     const p = ctx().principal!;
     const row = await this.db.tx(async (q) => (await q.query(
-      `SELECT u.id, u.email, u.full_name, u.mfa_enabled_at, r.name AS tenant_name, r.currency, r.locale, r.timezone, r.slug
+      `SELECT u.id, u.email, u.full_name, u.mfa_enabled_at, r.name AS tenant_name,
+            ((now() AT TIME ZONE r.timezone) - COALESCE((SELECT min(b.business_day_cutoff) FROM branches b WHERE b.deleted_at IS NULL), '04:00'::time)::interval)::date::text AS business_date, r.currency, r.locale, r.timezone, r.slug
          FROM users u JOIN restaurants r ON r.id = u.tenant_id WHERE u.id = $1`, [p.userId])).rows[0]);
     const scope = p.branchScope('tenancy.branch.read');
     return {
       id: row.id, email: row.email, fullName: row.full_name,
-      tenant: { id: p.tenantId, slug: row.slug, name: row.tenant_name, currency: row.currency.trim(), locale: row.locale, timezone: row.timezone },
+      tenant: { id: p.tenantId, slug: row.slug, name: row.tenant_name, businessDate: row.business_date, currency: row.currency.trim(), locale: row.locale, timezone: row.timezone },
       mfa: { enabled: row.mfa_enabled_at != null, required: this.env.MFA_ENFORCE === 'true' && p.grants.some((g) => (MFA_REQUIRED_ROLES as string[]).includes(g.roleKey)) },
       roles: p.grants, permissions: p.permissionList(), branchScope: scope, isCorporate: p.isCorporate,
     };

@@ -32,9 +32,16 @@ export class ReportsService {
     return s;   // null = todas
   }
 
+  /**
+   * «Hoy» del negocio = DÍA OPERATIVO, no el día calendario: una venta a las 00:30 pertenece al día que empezó antes (corte
+   * `business_day_cutoff`, 04:00 por defecto), igual que `orders.business_date`. Con el día calendario el dashboard marcaba $0
+   * entre la medianoche y el corte (justo en pleno servicio de cena/noche).
+   */
   async tenantToday(q: Tx): Promise<string> {
-    const tz = (await q.query('SELECT timezone FROM restaurants LIMIT 1')).rows[0]?.timezone ?? 'America/Mexico_City';
-    return todayIn(tz);
+    const r = (await q.query(
+      `SELECT ((now() AT TIME ZONE r.timezone) - COALESCE((SELECT min(b.business_day_cutoff) FROM branches b WHERE b.deleted_at IS NULL), '04:00'::time)::interval)::date::text AS d
+         FROM restaurants r LIMIT 1`)).rows[0];
+    return r?.d ?? todayIn('America/Mexico_City');
   }
 
   async run(type: string, f: Dict): Promise<ReportResult> {

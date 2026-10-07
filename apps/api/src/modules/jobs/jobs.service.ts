@@ -65,7 +65,7 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
       await emit(q, { type: 'SHIFT_PENDING', severity: 'WARNING', branchId: s.branch_id, title: '💰 Corte de caja pendiente', body: 'Hay un turno abierto por más de 14 horas.', dedupeKey: `shift-open:${s.id}:${new Date().toISOString().slice(0, 10)}` });
     for (const k of (await q.query(`SELECT ko.id, ko.branch_id, o.number, ko.station_key FROM kitchen_orders ko JOIN orders o ON o.id = ko.order_id WHERE ko.status IN ('NEW','PREPARING') AND ko.created_at < now() - interval '10 minutes'`)).rows)
       await emit(q, { type: 'ORDER_DELAYED', severity: 'WARNING', branchId: k.branch_id, title: `🍔 Pedido retrasado #${k.number} (${k.station_key})`, dedupeKey: `late:${k.id}` });
-    for (const l of (await q.query(`SELECT l.id, l.branch_id, i.name, l.expires_on FROM inventory_lots l JOIN ingredients i ON i.id = l.ingredient_id WHERE l.qty_remaining > 0 AND l.expires_on IS NOT NULL AND l.expires_on <= current_date + 3`)).rows)
+    for (const l of (await q.query(`SELECT l.id, l.branch_id, i.name, l.expires_on FROM inventory_lots l JOIN ingredients i ON i.id = l.ingredient_id WHERE l.qty_remaining > 0 AND l.expires_on IS NOT NULL AND l.expires_on <= tenant_today() + 3`)).rows)
       await emit(q, { type: 'EXPIRING', severity: 'WARNING', branchId: l.branch_id, title: `⏳ Por caducar: ${l.name}`, body: `Caduca ${new Date(l.expires_on).toISOString().slice(0, 10)}`, dedupeKey: `exp:${l.id}` });
     return n;
   }

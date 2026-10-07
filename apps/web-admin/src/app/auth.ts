@@ -3,7 +3,7 @@ import { api, post, refreshSession, setToken } from './api';
 
 export interface Me {
   id: string; email: string; fullName: string; isCorporate: boolean;
-  tenant: { id: string; slug: string; name: string; currency: string; locale: string; timezone: string };
+  tenant: { id: string; slug: string; name: string; businessDate: string; currency: string; locale: string; timezone: string };
   mfa: { enabled: boolean; required: boolean };
   roles: { roleKey: string; branchId: string | null }[]; permissions: Record<string, 'ALL' | string[]>; branchScope: string[] | null;
 }

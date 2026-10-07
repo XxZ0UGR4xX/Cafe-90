@@ -46,9 +46,9 @@ export class InventoryService {
   expiring(branchId: string, days: number) {
     return this.db.tx(async (q) => (await q.query(
       `SELECT l.id, i.name AS ingredient, i.unit, l.lot_code AS "lotCode", l.expires_on AS "expiresOn", l.qty_remaining AS qty,
-              (l.expires_on - current_date) AS "daysLeft"
+              (l.expires_on - tenant_today()) AS "daysLeft"
          FROM inventory_lots l JOIN ingredients i ON i.id = l.ingredient_id
-        WHERE l.branch_id = $1 AND l.qty_remaining > 0 AND l.expires_on IS NOT NULL AND l.expires_on <= current_date + $2::int
+        WHERE l.branch_id = $1 AND l.qty_remaining > 0 AND l.expires_on IS NOT NULL AND l.expires_on <= tenant_today() + $2::int
         ORDER BY l.expires_on`, [branchId, days])).rows);
   }
 

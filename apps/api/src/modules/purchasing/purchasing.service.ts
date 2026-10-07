@@ -204,7 +204,7 @@ export class PurchasingService {
       }
       const row = (await q.query(
         `INSERT INTO supplier_invoices (tenant_id, supplier_id, purchase_order_id, invoice_number, total, issued_on, due_on, price_variance_flag)
-         VALUES (app_tenant_id(),$1,$2,$3,$4,COALESCE($5::date, current_date),$6,$7) RETURNING id, status, price_variance_flag AS "priceVarianceFlag"`,
+         VALUES (app_tenant_id(),$1,$2,$3,$4,COALESCE($5::date, tenant_today()),$6,$7) RETURNING id, status, price_variance_flag AS "priceVarianceFlag"`,
         [d.supplierId, d.purchaseOrderId ?? null, d.invoiceNumber, d.total, d.issuedOn ?? null, d.dueOn ?? null, flag])).rows[0];
       await this.audit.record(q, { action: 'supplier_invoice.create', entity: 'supplier_invoice', entityId: row.id, newValue: d });
       return row;

@@ -71,7 +71,9 @@ export default function Invoices() {
   const [global, setGlobal] = useState<{ date: string } | null>(null);
   const q = useGet<any[]>(['invoices'], '/invoices', { status: tab === 'all' ? undefined : tab, q: search || undefined, limit: 100 });
   const prof = useGet<any>(['fiscal', 'profile'], '/fiscal/profile', undefined, { enabled: can('fiscal.profile.read') });
-  const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString('en-CA');
+  // el último día CERRADO es el anterior al día operativo del servidor (el corte es a las 04:00, no a medianoche)
+  const businessDate = useSession((s) => s.me?.tenant.businessDate) ?? today();
+  const yesterday = new Date(Date.parse(`${businessDate}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   const runGlobal = useAct(() => post('/invoices/global', { branchId, date: global!.date }), { invalidate: [['invoices']], ok: '🧾 Factura global timbrada', onSuccess: (inv) => { setGlobal(null); setSel(inv.id); } });
   return <>
     {prof.data && (!prof.data.profile?.enabled || !prof.data.provider) && <RetroCard tone="red" title="🧾 Facturación sin configurar"><p style={{ margin: 0 }}>Falta el perfil fiscal del restaurante (RFC, razón social, régimen y código postal) o está deshabilitado. Configúralo en <strong>Configuración → Facturación</strong>.</p></RetroCard>}
