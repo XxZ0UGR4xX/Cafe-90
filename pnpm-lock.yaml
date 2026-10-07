@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  fastify: '>=5.12.5'
+  js-yaml@>=5.0.0 <=5.4.0: '>=5.4.1'
+
 importers:
 
   .: {}
@@ -50,7 +54,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       fastify:
-        specifier: ^5.12.5
+        specifier: '>=5.12.5'
         version: 5.12.5
       jose:
         specifier: ^5.9.0
@@ -156,8 +160,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       react-router-dom:
-        specifier: ^6.27.0
-        version: 6.30.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^7.18.0
+        version: 7.18.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       socket.io-client:
         specifier: ^4.8.0
         version: 4.8.4
@@ -217,8 +221,8 @@ importers:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
       react-router-dom:
-        specifier: ^6.27.0
-        version: 6.30.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^7.18.0
+        version: 7.18.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       zustand:
         specifier: ^5.0.0
         version: 5.0.15(@types/react@18.3.31)(react@18.3.1)
@@ -1798,10 +1802,6 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@remix-run/router@1.23.4':
-    resolution: {integrity: sha512-q7j5geK7xs3UJSdm9/iytUNclBnLmYx1EnSeCFXHPeutdqgIMeFeHtUZgS3EhlKxdBEAu8OwtJCwmLrEzpSs7Q==}
-    engines: {node: '>=14.0.0'}
-
   '@rolldown/pluginutils@1.0.0-beta.27':
     resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
 
@@ -2667,9 +2667,6 @@ packages:
   fastify-plugin@6.0.0:
     resolution: {integrity: sha512-fZOty7z3O7vOliF6d8bHE3wiEh1KcNnKEQensSgTk9C1DvN6nRLS++XVd86v33Hw/8u9Un8A1zDrQ8ujcQDHEg==}
 
-  fastify@5.11.3:
-    resolution: {integrity: sha512-W6hzDP8s0iSeL7LGwY6Oc/ZxuXWOvFEMs6p2L0Si415YRo27W5pBKdOTXxhemBDeSTAcpYf5evRA9onF2OYhPA==}
-
   fastify@5.12.5:
     resolution: {integrity: sha512-OB2k1dlxs5/NAABqeKV2FUHkSD2BbENsCak8yULVcymn3fHIPDVa9TI3SDnJSWYSllZmSYuZXy2gTnsT+Sut1A==}
 
@@ -2996,8 +2993,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@5.3.0:
-    resolution: {integrity: sha512-muutsYr+e2+d3rTgUGslq5rxbBlUy3cJ61IsHag2QNDQV+7zXWjkUpmALIajhrlLlrgRUiymj6U3zUr/TMK84Q==}
+  js-yaml@5.4.3:
+    resolution: {integrity: sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw==}
     hasBin: true
 
   jsdom@25.0.1:
@@ -3035,9 +3032,6 @@ packages:
   leven@3.1.0:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
-
-  light-my-request@6.3.0:
-    resolution: {integrity: sha512-bWTAPJmeWQH5suJNYwG0f5cs0p6ho9e6f1Ppoxv5qMosY+s9Ir2+ZLvvHcgA7VTDop4zl/NCHhOVVqU+kd++Ow==}
 
   light-my-request@6.6.0:
     resolution: {integrity: sha512-CHYbu8RtboSIoVsHZ6Ye4cj4Aw/yg2oAFimlF7mNvfDV192LR7nDiKtSIfCuLT7KokPSTn/9kfVLm5OGN0A28A==}
@@ -3399,18 +3393,22 @@ packages:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
 
-  react-router-dom@6.30.6:
-    resolution: {integrity: sha512-0RHKZz7wwffvkU+2MFVT2NnjK44ssLEV+m0CAJaS2Ksmorrwj7WxH00jO0SOCW26/tINUnJHToXblDs33I38YQ==}
-    engines: {node: '>=14.0.0'}
+  react-router-dom@7.18.4:
+    resolution: {integrity: sha512-yrfmJHIpDG7taCpqKjT1G5B6q3O2K+RN8/fgNf0lTjCwiPbQ0ei6vXX9ZjQR+7ld8Tr7Z5xmyMnZ8YJrphWQUw==}
+    engines: {node: '>=20.0.0'}
     peerDependencies:
-      react: '>=16.8'
-      react-dom: '>=16.8'
+      react: '>=18'
+      react-dom: '>=18'
 
-  react-router@6.30.6:
-    resolution: {integrity: sha512-5HfK7k5im7LTOB0EqCQmfvy4C13G92Ssj1VTmouTK3AJvyjKTnFuCV0vcMAD/JS+JC4DvDIBRrlAeJIFjh5VWg==}
-    engines: {node: '>=14.0.0'}
+  react-router@7.18.4:
+    resolution: {integrity: sha512-PUPQcMhMGRAslLcvtlPz/kmzBEWPhLdgLFrL7pLNepBL6dX0lWj4WD2cUYVgYCuT3jxvghYFg81cDTj44DhetQ==}
+    engines: {node: '>=20.0.0'}
     peerDependencies:
-      react: '>=16.8'
+      react: '>=18'
+      react-dom: '>=18'
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
 
   react@18.3.1:
     resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
@@ -5301,7 +5299,7 @@ snapshots:
       '@nestjs/common': 11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/websockets@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       fast-querystring: 1.1.2
-      fastify: 5.11.3
+      fastify: 5.12.5
       find-my-way: 9.7.0
       light-my-request: 6.6.0
       path-to-regexp: 8.4.2
@@ -5327,7 +5325,7 @@ snapshots:
       '@nestjs/common': 11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.2.7(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/websockets@11.2.7)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/mapped-types': 2.1.1(@nestjs/common@11.2.7(reflect-metadata@0.2.2)(rxjs@7.8.2))(reflect-metadata@0.2.2)
-      js-yaml: 5.3.0
+      js-yaml: 5.4.3
       lodash: 4.18.1
       path-to-regexp: 8.4.2
       reflect-metadata: 0.2.2
@@ -5529,8 +5527,6 @@ snapshots:
   '@playwright/test@1.63.0':
     dependencies:
       playwright: 1.63.0
-
-  '@remix-run/router@1.23.4': {}
 
   '@rolldown/pluginutils@1.0.0-beta.27': {}
 
@@ -6463,24 +6459,6 @@ snapshots:
 
   fastify-plugin@6.0.0: {}
 
-  fastify@5.11.3:
-    dependencies:
-      '@fastify/ajv-compiler': 4.0.6
-      '@fastify/error': 4.2.0
-      '@fastify/fast-json-stringify-compiler': 5.1.0
-      '@fastify/proxy-addr': 5.1.1
-      abstract-logging: 2.0.1
-      avvio: 9.3.0
-      fast-json-stringify: 7.0.1
-      find-my-way: 9.7.0
-      light-my-request: 6.6.0
-      pino: 9.14.0
-      process-warning: 5.1.0
-      rfdc: 1.4.1
-      secure-json-parse: 4.1.0
-      semver: 7.8.5
-      toad-cache: 3.7.4
-
   fastify@5.12.5:
     dependencies:
       '@fastify/ajv-compiler': 4.0.6
@@ -6491,7 +6469,7 @@ snapshots:
       avvio: 9.3.0
       fast-json-stringify: 7.0.1
       find-my-way: 9.9.0
-      light-my-request: 6.3.0
+      light-my-request: 6.6.0
       pino: 9.14.0
       process-warning: 5.1.0
       rfdc: 1.4.1
@@ -6848,7 +6826,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@5.3.0:
+  js-yaml@5.4.3:
     dependencies:
       argparse: 2.0.1
 
@@ -6899,12 +6877,6 @@ snapshots:
   jsonpointer@5.0.1: {}
 
   leven@3.1.0: {}
-
-  light-my-request@6.3.0:
-    dependencies:
-      cookie: 1.1.1
-      process-warning: 4.0.1
-      set-cookie-parser: 2.7.2
 
   light-my-request@6.6.0:
     dependencies:
@@ -7225,17 +7197,19 @@ snapshots:
 
   react-refresh@0.17.0: {}
 
-  react-router-dom@6.30.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  react-router-dom@7.18.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
-      '@remix-run/router': 1.23.4
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      react-router: 6.30.6(react@18.3.1)
+      react-router: 7.18.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
-  react-router@6.30.6(react@18.3.1):
+  react-router@7.18.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
-      '@remix-run/router': 1.23.4
+      cookie: 1.1.1
       react: 18.3.1
+      set-cookie-parser: 2.7.2
+    optionalDependencies:
+      react-dom: 18.3.1(react@18.3.1)
 
   react@18.3.1:
     dependencies:

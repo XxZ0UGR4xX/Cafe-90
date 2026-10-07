@@ -22,6 +22,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ORDER_INVALID_TRANSITION: '⚠️ Esta acción no es posible en el estado actual del pedido.',
   PAYMENT_AMOUNT_MISMATCH: '💰 El monto recibido no coincide con el total de la cuenta.',
   SHIFT_NOT_OPEN: '💰 Debes abrir caja antes de cobrar.',
+  REGISTER_IN_USE: '💰 Esta caja ya está abierta por otra persona.',
   SHIFT_ALREADY_OPEN: '💰 Ya tienes una caja abierta.',
   PRODUCT_UNAVAILABLE: '🍔 Este producto no está disponible por ahora.',
   INSUFFICIENT_STOCK: '📦 No hay existencias suficientes.',

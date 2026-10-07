@@ -48,6 +48,8 @@ export class CashService {
         registerId = (await q.query(`INSERT INTO cash_registers (tenant_id, branch_id, name) VALUES (app_tenant_id(),$1,'Caja 1')
                        ON CONFLICT (branch_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id`, [d.branchId])).rows[0].id;
       } else if (!(await q.query('SELECT 1 FROM cash_registers WHERE id=$1 AND branch_id=$2 AND is_active', [registerId, d.branchId])).rowCount) throw notFound('register');
+      const busy = (await q.query(`SELECT u.full_name FROM cash_shifts s JOIN users u ON u.id = s.user_id WHERE s.register_id=$1 AND s.status='OPEN'`, [registerId])).rows[0];
+      if (busy) throw new AppError('REGISTER_IN_USE', 409, { by: busy.full_name }, false, `💰 Esta caja ya está abierta por ${busy.full_name}. Pídele que haga el corte o abre otra caja.`);
       const shift = (await q.query(
         `INSERT INTO cash_shifts (tenant_id, branch_id, register_id, user_id, opening_float) VALUES (app_tenant_id(),$1,$2,$3,$4) RETURNING id`,
         [d.branchId, registerId, uid, d.openingFloat]).catch((e) => { if (e.code === '23505') throw new AppError('SHIFT_ALREADY_OPEN', 409); throw e; })).rows[0];

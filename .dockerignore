@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+.git
+.github
+.env
+.env.*
+!.env.example
+**/coverage
+**/*.log
+docs
+e2e/shots
+e2e/test-results
+e2e/playwright-report

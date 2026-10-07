@@ -4,12 +4,13 @@ const API = process.env.E2E_API_URL ?? 'http://localhost:3000';
 const PUBLIC = process.env.E2E_PUBLIC_URL ?? 'http://localhost:5174';
 const SHOTS = 'shots';
 
-async function adminToken(request: any) {
-  return (await (await request.post(`${API}/auth/login`, { data: { tenant: 'retroburger', email: 'admin@retroburger.test', password: 'Retro90!Burger' } })).json()).accessToken as string;
+/** Cajero de la sucursal CENTRO (el mismo que usa pos-flow): la caja es de una sola persona por vez, así no se pisan las pruebas. */
+async function cashierToken(request: any) {
+  return (await (await request.post(`${API}/auth/login`, { data: { tenant: 'retroburger', email: 'cajero-centro@retroburger.test', password: 'Retro90!Staff' } })).json()).accessToken as string;
 }
 /** Crea y cobra una orden por API (con caja abierta) y devuelve id, número y código de autofactura. */
 async function paidOrder(request: any) {
-  const tok = await adminToken(request); const h = { authorization: `Bearer ${tok}` };
+  const tok = await cashierToken(request); const h = { authorization: `Bearer ${tok}` };
   const branches = await (await request.get(`${API}/branches`, { headers: h })).json(); const b = branches.find((x: any) => x.code === 'CENTRO') ?? branches[0];
   await request.post(`${API}/cash/shifts/open`, { headers: h, data: { branchId: b.id, openingFloat: 100 } });
   const menu = await (await request.get(`${API}/products?limit=50`, { headers: h })).json();

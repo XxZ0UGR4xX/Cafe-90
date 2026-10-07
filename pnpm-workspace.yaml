@@ -6,3 +6,7 @@ onlyBuiltDependencies:
   - "@swc/core"
   - esbuild
   - "@nestjs/core"
+# Parches de seguridad de dependencias transitivas (resultado de `pnpm audit`); revisar al actualizar NestJS
+overrides:
+  fastify: ">=5.12.5"
+  "js-yaml@>=5.0.0 <=5.4.0": ">=5.4.1"

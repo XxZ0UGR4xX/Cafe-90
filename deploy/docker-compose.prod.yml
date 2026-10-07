@@ -1,0 +1,74 @@
+# Despliegue de producción en UN servidor (Docker + Compose v2).  Ver docs/DEPLOY.md
+#   cp deploy/.env.prod.example deploy/.env.prod   # y completa TODOS los valores
+#   docker compose --env-file deploy/.env.prod -f deploy/docker-compose.prod.yml up -d --build
+name: retroburger
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?define POSTGRES_ADMIN_PASSWORD}
+      OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?define DB_OWNER_PASSWORD}
+      APP_PASSWORD: ${DB_APP_PASSWORD:?define DB_APP_PASSWORD}
+      BACKUP_PASSWORD: ${DB_BACKUP_PASSWORD:?define DB_BACKUP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh:ro
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 20 }
+    networks: [internal]            # sin puertos publicados: sólo la API y los respaldos acceden
+
+  migrate:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    image: retroburger-api:${APP_VERSION:-latest}
+    command: ["node", "dist/database/migrate.js"]
+    restart: "no"
+    environment:
+      DATABASE_MIGRATE_URL: postgres://retroburger_owner:${DB_OWNER_PASSWORD}@db:5432/retroburger
+    depends_on: { db: { condition: service_healthy } }
+    networks: [internal]
+
+  api:
+    image: retroburger-api:${APP_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://retroburger_app:${DB_APP_PASSWORD}@db:5432/retroburger
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?define JWT_ACCESS_SECRET (>=32 caracteres)}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?define MFA_ENCRYPTION_KEY (>=32 caracteres)}
+      MFA_ENFORCE: ${MFA_ENFORCE:-true}
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: https://${ADMIN_HOST},https://${PUBLIC_HOST}
+      PUBLIC_WEB_URL: https://${PUBLIC_HOST}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-RetroBurger <no-reply@localhost>}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    networks: [internal, edge]
+
+  web-admin:
+    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-admin, VITE_API_URL: "https://${API_HOST}" } }
+    restart: unless-stopped
+    environment: { API_ORIGIN: "https://${API_HOST}", API_WS_ORIGIN: "wss://${API_HOST}" }
+    networks: [edge]
+
+  web-public:
+    build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-public, VITE_API_URL: "https://${API_HOST}", VITE_TENANT: "${PUBLIC_TENANT:?define PUBLIC_TENANT (slug del restaurante)}" } }
+    restart: unless-stopped
+    environment: { API_ORIGIN: "https://${API_HOST}", API_WS_ORIGIN: "wss://${API_HOST}" }
+    networks: [edge]
+
+  proxy:                           # TLS automático (Let's Encrypt) y único servicio expuesto
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment: { ADMIN_HOST: "${ADMIN_HOST}", PUBLIC_HOST: "${PUBLIC_HOST}", API_HOST: "${API_HOST}" }
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro, caddy_data:/data, caddy_config:/config]
+    depends_on: [api, web-admin, web-public]
+    networks: [edge]
+
+networks:
+  internal: { internal: true }     # la base de datos nunca sale a Internet
+  edge: {}
+volumes: { pgdata: {}, caddy_data: {}, caddy_config: {} }

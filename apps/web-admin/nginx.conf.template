@@ -1,0 +1,23 @@
+# Plantilla (envsubst al arrancar): ${API_ORIGIN} / ${API_WS_ORIGIN} se inyectan en la CSP de security.inc.
+server {
+  listen 80;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+  server_tokens off;
+
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml application/manifest+json;
+  gzip_min_length 1024;
+
+  location = /healthz { access_log off; default_type text/plain; return 200 "ok"; }
+
+  # Activos con hash: caché larga e inmutable
+  location /assets/ { include /etc/nginx/conf.d/security.inc; add_header Cache-Control "public, immutable"; expires 1y; try_files $uri =404; }
+
+  # El service worker y el HTML nunca se cachean (actualizaciones inmediatas de la PWA)
+  location = /sw.js { include /etc/nginx/conf.d/security.inc; add_header Cache-Control "no-cache"; try_files $uri =404; }
+
+  # SPA: cualquier ruta cae en index.html
+  location / { include /etc/nginx/conf.d/security.inc; add_header Cache-Control "no-cache"; try_files $uri $uri/ /index.html; }
+}

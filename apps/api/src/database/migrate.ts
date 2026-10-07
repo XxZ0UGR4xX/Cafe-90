@@ -7,7 +7,8 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { Client } from 'pg';
 
-const DIR = join(__dirname, '../../../../db/migrations');
+/** En contenedores las migraciones viajan en la imagen: MIGRATIONS_DIR las localiza. En el repo se resuelven relativas al código. */
+const DIR = process.env.MIGRATIONS_DIR ?? join(__dirname, '../../../../db/migrations');
 
 export async function migrate(url: string, appRole = 'retroburger_app', log = console.log): Promise<string[]> {
   const client = new Client({ connectionString: url });
