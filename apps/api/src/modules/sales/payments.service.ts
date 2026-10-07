@@ -21,7 +21,7 @@ export class PaymentsService {
    * orden bloqueada → validación de montos → pagos append-only → caja → estado → eventos (lealtad, mesa).
    * Idempotente por `clientUuid` de cada pago.
    */
-  async pay(orderId: string, d: { payments: Dict[] }) {
+  async pay(orderId: string, d: { payments: Dict[]; offline?: boolean }) {
     return this.db.tx(async (q) => {
       const o = await this.sales.lockOrder(q, orderId);
       const p = ctx().principal!;
@@ -40,7 +40,7 @@ export class PaymentsService {
 
       // Productos pendientes se envían a cocina al cobrar (flujo mostrador / pago anticipado)
       const unsent = (await q.query(`SELECT 1 FROM order_items WHERE order_id=$1 AND status='PENDING'`, [orderId])).rowCount;
-      if (unsent) await this.sales.sendToKitchen(orderId, q);
+      if (unsent) await this.sales.sendToKitchen(orderId, q, { allowNegative: !!d.offline });
 
       const fresh = await this.sales.lockOrder(q, orderId);
       const remaining = r2(fresh.total - fresh.paid_total);
@@ -73,24 +73,36 @@ export class PaymentsService {
   }
 
   /** Devolución total o parcial con contra-asientos (pago negativo, caja, inventario no preparado, puntos). */
-  async refund(orderId: string, d: { amount?: number; method: string; reason: string; supervisor?: SupervisorInput }) {
+  async refund(orderId: string, d: { amount?: number; method: string; reason: string; supervisor?: SupervisorInput; clientUuid?: string }) {
     return this.db.tx(async (q) => {
       const o = await this.sales.lockOrder(q, orderId);
+      if (d.clientUuid && (await q.query('SELECT 1 FROM payments WHERE client_uuid=$1', [d.clientUuid])).rowCount)
+        return { ...(await this.sales.get(orderId, q)), idempotent: true };
       await this.sales.assertNotInvoiced(q, orderId);
       const authBy = await this.supervisor.authorize('sales.order.refund', o.branch_id, d.supervisor);
       if (o.paid_total <= 0) throw new AppError('VALIDATION_ERROR', 400, { message: 'La cuenta no tiene pagos que devolver' });
       const amount = r2(d.amount ?? o.paid_total);
       if (amount <= 0 || amount > o.paid_total + 0.001) throw new AppError('PAYMENT_AMOUNT_MISMATCH', 409, { paid: o.paid_total, requested: amount });
+      // Sin clientUuid, una devolución idéntica en los últimos segundos es casi seguro un doble clic.
+      if (!d.clientUuid && (await q.query(
+        `SELECT 1 FROM payments WHERE order_id=$1 AND kind='REFUND' AND method=$2 AND amount=$3 AND at > now() - interval '5 seconds'`, [orderId, d.method, -amount])).rowCount)
+        throw new AppError('CONFLICT', 409, undefined, false, '⚠️ Esta devolución ya se registró hace un instante.');
+      // Se devuelve por el mismo medio con el que se cobró, hasta el neto de ese medio (cobros − devoluciones).
+      const byMethod = Number((await q.query(`SELECT COALESCE(sum(amount),0) AS s FROM payments WHERE order_id=$1 AND method=$2`, [orderId, d.method])).rows[0].s);
+      if (amount > byMethod + 0.001)
+        throw new AppError('PAYMENT_AMOUNT_MISMATCH', 409, { method: d.method, available: Math.max(r2(byMethod), 0), requested: amount }, false, '⚠️ Solo se puede devolver por el medio con que se cobró, hasta lo cobrado con él.');
       const p = ctx().principal!;
       const shiftId = await this.cash.openShiftId(q, p.userId, o.branch_id);
       if (!shiftId && d.method === 'CASH') throw new AppError('SHIFT_NOT_OPEN', 409);
       const pay = (await q.query(
-        `INSERT INTO payments (tenant_id, branch_id, order_id, kind, method, amount, cash_shift_id, received_by, reason) VALUES (app_tenant_id(),$1,$2,'REFUND',$3,$4,$5,$6,$7) RETURNING id`,
-        [o.branch_id, orderId, d.method, -amount, shiftId, p.userId, d.reason])).rows[0];
+        `INSERT INTO payments (tenant_id, branch_id, order_id, kind, method, amount, cash_shift_id, received_by, reason, client_uuid) VALUES (app_tenant_id(),$1,$2,'REFUND',$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [o.branch_id, orderId, d.method, -amount, shiftId, p.userId, d.reason, d.clientUuid ?? null])).rows[0];
       if (shiftId) await this.cash.recordRefund(q, { shiftId, branchId: o.branch_id, orderId, paymentId: pay.id, method: d.method, amount, reason: d.reason, authorizedBy: authBy });
       const paid = r2(o.paid_total - amount);
       const full = paid <= 0.001;
-      await q.query(`UPDATE orders SET paid_total=$2, payment_status=$3 WHERE id=$1`, [orderId, Math.max(paid, 0), full ? 'REFUNDED' : 'PARTIAL']);
+      // Devolución parcial: la venta sigue PAGADA (cuenta en reportes; no se vuelve a cobrar) y lo devuelto se lleva aparte.
+      await q.query(`UPDATE orders SET paid_total=$2, refunded_total = refunded_total + $4, payment_status=$3 WHERE id=$1`,
+        [orderId, Math.max(paid, 0), full ? 'REFUNDED' : 'PAID', amount]);
       if (full) await this.sales.voidOrder(q, { ...o, paid_total: 0 }, d.reason, authBy, true);
       await this.audit.record(q, { action: 'order.refund', entity: 'order', entityId: orderId, branchId: o.branch_id, newValue: { amount, full, authorizedBy: authBy }, reason: d.reason });
       await this.events.emit(q, { type: 'OrderRefunded', branchId: o.branch_id, payload: { orderId, customerId: o.customer_id, amount, full, total: o.total } });

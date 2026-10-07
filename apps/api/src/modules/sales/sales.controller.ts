@@ -27,7 +27,7 @@ export class SalesController {
   @Get() @Require('sales.order.read') list(@Query() q: OrdersListQuery) { return this.sales.list(q); }
   @Get(':id') @Require('sales.order.read') get(@Param('id', id) i: string) { return this.sales.get(i); }
   @Get(':id/receipt') @Require('sales.order.read') receipt(@Param('id', id) i: string) { return this.sales.receipt(i); }
-  @Post() @Require('sales.order.create') create(@Body() b: CreateBody) { return this.sales.create(b); }
+  @Post() @Require('sales.order.create') create(@Body() b: CreateBody) { return this.sales.create({ ...b, offline: false }); }   // `offline` solo lo fija /sync/push (el servidor), nunca el cliente
   @Patch(':id') @Require('sales.order.update') patch(@Param('id', id) i: string, @Body() b: PatchBody) { return this.sales.patch(i, b); }
   @Post(':id/items') @Require('sales.order.update') add(@Param('id', id) i: string, @Body() b: AddItemsBody) { return this.sales.addItems(i, b); }
   @Patch(':id/items/:itemId') @Require('sales.order.update')

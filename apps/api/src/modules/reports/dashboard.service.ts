@@ -24,15 +24,15 @@ export class DashboardService {
       const mtd = resolveRange('month', today);
       const month = await this.reports.metrics(q, branches, mtd.from, mtd.to);
       const todayM = await this.reports.metrics(q, branches, today, today);
-      const salesByDay = (await q.query(`SELECT to_char(o.business_date,'YYYY-MM-DD') AS d, sum(o.total) AS sales, sum(o.total - o.tax_total - o.cost_total) AS profit, round(avg(o.total),2) AS "avgTicket", count(*)::int AS orders
+      const salesByDay = (await q.query(`SELECT to_char(o.business_date,'YYYY-MM-DD') AS d, sum(o.total - o.refunded_total) AS sales, sum(o.total - o.refunded_total - o.tax_total - o.cost_total) AS profit, round(avg(o.total - o.refunded_total),2) AS "avgTicket", count(*)::int AS orders
         FROM orders o WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) GROUP BY 1 ORDER BY 1`, [r.from, r.to, branches])).rows;
-      const salesByHour = (await q.query(`SELECT EXTRACT(hour FROM (o.created_at AT TIME ZONE b.timezone))::int AS h, sum(o.total) AS sales, count(*)::int AS orders FROM orders o JOIN branches b ON b.id = o.branch_id
+      const salesByHour = (await q.query(`SELECT EXTRACT(hour FROM (o.created_at AT TIME ZONE b.timezone))::int AS h, sum(o.total - o.refunded_total) AS sales, count(*)::int AS orders FROM orders o JOIN branches b ON b.id = o.branch_id
         WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) GROUP BY 1 ORDER BY 1`, [r.from, r.to, branches])).rows;
       const byCategory = (await q.query(`SELECT COALESCE(c.name,'Sin categoría') AS category, sum(oi.line_total) AS sales FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id LEFT JOIN categories c ON c.id = p.category_id
         WHERE ${SALE} AND oi.status <> 'CANCELLED' AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) GROUP BY 1 ORDER BY 2 DESC`, [r.from, r.to, branches])).rows;
       const top = (await q.query(`SELECT p.name, sum(oi.qty)::int AS qty, sum(oi.line_total) AS sales FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
         WHERE ${SALE} AND oi.status <> 'CANCELLED' AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) GROUP BY p.name ORDER BY qty DESC, sales DESC LIMIT 5`, [r.from, r.to, branches])).rows;
-      const monthly = (await q.query(`SELECT to_char(date_trunc('month', o.business_date),'YYYY-MM') AS m, sum(o.total) AS sales FROM orders o WHERE ${SALE} AND o.business_date >= (date_trunc('month', $1::date) - interval '5 months') AND o.business_date <= $1::date
+      const monthly = (await q.query(`SELECT to_char(date_trunc('month', o.business_date),'YYYY-MM') AS m, sum(o.total - o.refunded_total) AS sales FROM orders o WHERE ${SALE} AND o.business_date >= (date_trunc('month', $1::date) - interval '5 months') AND o.business_date <= $1::date
         AND ($2::uuid[] IS NULL OR o.branch_id = ANY($2::uuid[])) GROUP BY 1 ORDER BY 1`, [today, branches])).rows;
       const newCustomers = (await q.query(`SELECT count(*)::int AS n FROM customers WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2`, [r.from, r.to])).rows[0].n;
       const ranking = await this.ranking(q, branches, r.from, r.to, r.prevFrom, r.prevTo);
@@ -50,13 +50,13 @@ export class DashboardService {
   private async ranking(q: Tx, branches: string[] | null, from: string, to: string, pFrom: string, pTo: string) {
     const rows = (await q.query(
       `SELECT b.id, b.name AS branch,
-          COALESCE(sum(o.total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS sales,
+          COALESCE(sum(o.total - o.refunded_total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS sales,
           count(*) FILTER (WHERE o.business_date BETWEEN $1 AND $2)::int AS orders,
-          COALESCE(sum(o.total - o.tax_total - o.cost_total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS profit,
+          COALESCE(sum(o.total - o.refunded_total - o.tax_total - o.cost_total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS profit,
           COALESCE(sum(o.cost_total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS cogs,
-          COALESCE(sum(o.total - o.tax_total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS net,
+          COALESCE(sum(o.total - o.refunded_total - o.tax_total) FILTER (WHERE o.business_date BETWEEN $1 AND $2),0) AS net,
           count(DISTINCT o.customer_id) FILTER (WHERE o.business_date BETWEEN $1 AND $2)::int AS customers,
-          COALESCE(sum(o.total) FILTER (WHERE o.business_date BETWEEN $3 AND $4),0) AS prev_sales
+          COALESCE(sum(o.total - o.refunded_total) FILTER (WHERE o.business_date BETWEEN $3 AND $4),0) AS prev_sales
          FROM branches b LEFT JOIN orders o ON o.branch_id = b.id AND ${SALE}
         WHERE b.deleted_at IS NULL AND ($5::uuid[] IS NULL OR b.id = ANY($5::uuid[])) GROUP BY b.id, b.name ORDER BY sales DESC`, [from, to, pFrom, pTo, branches])).rows;
     return rows.map((r, i) => ({ rank: i + 1, branchId: r.id, branch: r.branch, sales: r2(r.sales), orders: r.orders, avgTicket: r.orders ? r2(r.sales / r.orders) : 0, profit: r2(r.profit),
@@ -69,7 +69,7 @@ export class DashboardService {
     return this.db.tx(async (q) => {
       const rows = (await q.query(
         `SELECT b.id, b.name, b.code, b.address, b.status,
-            COALESCE((SELECT sum(o.total) FROM orders o WHERE o.branch_id=b.id AND ${SALE} AND o.business_date = (((now() AT TIME ZONE b.timezone) - b.business_day_cutoff::interval)::date)),0) AS "salesToday",
+            COALESCE((SELECT sum(o.total - o.refunded_total) FROM orders o WHERE o.branch_id=b.id AND ${SALE} AND o.business_date = (((now() AT TIME ZONE b.timezone) - b.business_day_cutoff::interval)::date)),0) AS "salesToday",
             COALESCE((SELECT count(*) FROM orders o WHERE o.branch_id=b.id AND o.status <> 'CANCELLED' AND o.business_date = (((now() AT TIME ZONE b.timezone) - b.business_day_cutoff::interval)::date)),0)::int AS "ordersToday",
             (SELECT count(*) FROM cash_shifts s WHERE s.branch_id=b.id AND s.status='OPEN')::int AS "openShifts",
             (SELECT count(DISTINCT ur.user_id) FROM user_roles ur WHERE ur.branch_id = b.id)::int AS employees,
@@ -126,7 +126,7 @@ export class DashboardService {
     return this.db.tx(async (q) => {
       const today = (await q.query(`SELECT (((now() AT TIME ZONE timezone) - business_day_cutoff::interval)::date) AS d FROM branches WHERE id=$1`, [branchId])).rows[0].d;
       const tables = (await q.query(`SELECT count(*) FILTER (WHERE status='OCCUPIED')::int AS occupied, count(*) FILTER (WHERE status='FREE')::int AS free, count(*) FILTER (WHERE status='CLEANING')::int AS cleaning, count(*)::int AS total FROM tables WHERE branch_id=$1 AND is_active`, [branchId])).rows[0];
-      const mine = (await q.query(`SELECT count(*) FILTER (WHERE status NOT IN ('CANCELLED','COMPLETED'))::int AS open, COALESCE(sum(total) FILTER (WHERE ${SALE}),0) AS sales, COALESCE(sum(tip_total) FILTER (WHERE ${SALE}),0) AS tips
+      const mine = (await q.query(`SELECT count(*) FILTER (WHERE status NOT IN ('CANCELLED','COMPLETED'))::int AS open, COALESCE(sum(total - refunded_total) FILTER (WHERE ${SALE}),0) AS sales, COALESCE(sum(tip_total) FILTER (WHERE ${SALE}),0) AS tips
         FROM orders o WHERE o.branch_id=$1 AND o.waiter_id=$2 AND o.business_date=$3`, [branchId, p.userId, today])).rows[0];
       const openOrders = (await q.query(`SELECT o.id, o.number, t.number AS "tableNumber", o.total, o.status, o.payment_status AS "paymentStatus" FROM orders o LEFT JOIN tables t ON t.id = o.table_id WHERE o.branch_id=$1 AND o.waiter_id=$2 AND o.status NOT IN ('CANCELLED','COMPLETED') ORDER BY o.created_at DESC LIMIT 20`, [branchId, p.userId])).rows;
       const ready = (await q.query(`SELECT ko.id, o.number, t.number AS "tableNumber", ko.station_key AS station FROM kitchen_orders ko JOIN orders o ON o.id = ko.order_id LEFT JOIN tables t ON t.id = o.table_id WHERE ko.branch_id=$1 AND ko.status='READY' AND o.waiter_id=$2`, [branchId, p.userId])).rows;

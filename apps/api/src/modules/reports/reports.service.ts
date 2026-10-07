@@ -74,7 +74,7 @@ export class ReportsService {
     const key = groupBy === 'hour' ? `to_char(o.created_at AT TIME ZONE b.timezone, 'HH24":00"')` : groupBy === 'branch' ? 'b.name' : `to_char(o.business_date, 'YYYY-MM-DD')`;
     const rows = (await q.query(
       `SELECT ${key} AS period, count(*)::int AS orders, COALESCE(sum(o.subtotal),0) AS gross, COALESCE(sum(o.discount_total),0) AS discounts, COALESCE(sum(o.tax_total),0) AS tax,
-              COALESCE(sum(o.total),0) AS net, COALESCE(sum(o.tip_total),0) AS tips, COALESCE(round(avg(o.total),2),0) AS "avgTicket"
+              COALESCE(sum(o.total - o.refunded_total),0) AS net, COALESCE(sum(o.tip_total),0) AS tips, COALESCE(round(avg(o.total - o.refunded_total),2),0) AS "avgTicket"
          FROM orders o JOIN branches b ON b.id = o.branch_id
         WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) AND ($4::uuid IS NULL OR o.waiter_id = $4)
           AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM payments pm WHERE pm.order_id = o.id AND pm.method = $5 AND pm.kind='PAYMENT'))
@@ -102,8 +102,8 @@ export class ReportsService {
 
   private async profit(q: Tx, p: Dict): Promise<ReportResult> {
     const rows = (await q.query(
-      `SELECT to_char(o.business_date,'YYYY-MM-DD') AS period, COALESCE(sum(o.total - o.tax_total),0) AS revenue, COALESCE(sum(o.cost_total),0) AS cogs,
-              COALESCE(sum(o.total - o.tax_total - o.cost_total),0) AS profit
+      `SELECT to_char(o.business_date,'YYYY-MM-DD') AS period, COALESCE(sum(o.total - o.refunded_total - o.tax_total),0) AS revenue, COALESCE(sum(o.cost_total),0) AS cogs,
+              COALESCE(sum(o.total - o.refunded_total - o.tax_total - o.cost_total),0) AS profit
          FROM orders o WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) GROUP BY 1 ORDER BY 1`, [p.from, p.to, p.branches])).rows
       .map((r) => ({ ...r, margin: r.revenue ? r2((r.profit / r.revenue) * 100) : 0 }));
     const t = rows.reduce((a, r) => ({ revenue: a.revenue + r.revenue, cogs: a.cogs + r.cogs, profit: a.profit + r.profit }), { revenue: 0, cogs: 0, profit: 0 });
@@ -144,7 +144,7 @@ export class ReportsService {
 
   private async employees(q: Tx, p: Dict): Promise<ReportResult> {
     const rows = (await q.query(
-      `SELECT COALESCE(u.full_name,'—') AS employee, count(*)::int AS orders, COALESCE(sum(o.total),0) AS sales, COALESCE(round(avg(o.total),2),0) AS "avgTicket", COALESCE(sum(o.tip_total),0) AS tips
+      `SELECT COALESCE(u.full_name,'—') AS employee, count(*)::int AS orders, COALESCE(sum(o.total - o.refunded_total),0) AS sales, COALESCE(round(avg(o.total - o.refunded_total),2),0) AS "avgTicket", COALESCE(sum(o.tip_total),0) AS tips
          FROM orders o LEFT JOIN users u ON u.id = o.waiter_id WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) AND ($4::uuid IS NULL OR o.waiter_id = $4)
         GROUP BY u.full_name ORDER BY sales DESC`, [p.from, p.to, p.branches, p.employeeId])).rows;
     return { columns: [{ key: 'employee', label: 'Empleado', type: 'text' }, { key: 'orders', label: 'Pedidos', type: 'number' }, { key: 'sales', label: 'Ventas', type: 'money' }, { key: 'avgTicket', label: 'Ticket prom.', type: 'money' }, { key: 'tips', label: 'Propinas', type: 'money' }], rows, totals: { sales: r2(rows.reduce((a, r) => a + r.sales, 0)) } };
@@ -152,7 +152,7 @@ export class ReportsService {
 
   private async customers(q: Tx, p: Dict): Promise<ReportResult> {
     const rows = (await q.query(
-      `SELECT c.name AS customer, c.phone, count(*)::int AS visits, COALESCE(sum(o.total),0) AS spent, COALESCE(round(avg(o.total),2),0) AS "avgTicket", max(o.created_at) AS "lastVisit"
+      `SELECT c.name AS customer, c.phone, count(*)::int AS visits, COALESCE(sum(o.total - o.refunded_total),0) AS spent, COALESCE(round(avg(o.total - o.refunded_total),2),0) AS "avgTicket", max(o.created_at) AS "lastVisit"
          FROM orders o JOIN customers c ON c.id = o.customer_id WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[])) GROUP BY c.id ORDER BY spent DESC LIMIT 200`, [p.from, p.to, p.branches])).rows;
     return { columns: [{ key: 'customer', label: 'Cliente', type: 'text' }, { key: 'phone', label: 'Teléfono', type: 'text' }, { key: 'visits', label: 'Visitas', type: 'number' }, { key: 'spent', label: 'Gastado', type: 'money' }, { key: 'avgTicket', label: 'Ticket prom.', type: 'money' }, { key: 'lastVisit', label: 'Última visita', type: 'date' }], rows };
   }
@@ -195,7 +195,7 @@ export class ReportsService {
   // ───────── Analítica ─────────
   async metrics(q: Tx, branches: string[] | null, from: string, to: string) {
     const s = (await q.query(
-      `SELECT count(*)::int AS orders, COALESCE(sum(o.total),0) AS revenue, COALESCE(sum(o.total - o.tax_total),0) AS net_sales, COALESCE(sum(o.cost_total),0) AS cogs,
+      `SELECT count(*)::int AS orders, COALESCE(sum(o.total - o.refunded_total),0) AS revenue, COALESCE(sum(o.total - o.refunded_total - o.tax_total),0) AS net_sales, COALESCE(sum(o.cost_total),0) AS cogs,
               COALESCE(sum(o.discount_total),0) AS discounts, COALESCE(sum(o.tip_total),0) AS tips, count(DISTINCT o.customer_id)::int AS customers
          FROM orders o WHERE ${SALE} AND o.business_date BETWEEN $1 AND $2 AND ($3::uuid[] IS NULL OR o.branch_id = ANY($3::uuid[]))`, [from, to, branches])).rows[0];
     const ret = (await q.query(

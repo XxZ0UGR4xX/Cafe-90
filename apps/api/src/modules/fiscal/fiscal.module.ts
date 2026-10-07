@@ -15,6 +15,7 @@ class CustomerFiscalBody extends createZodDto(CustomerFiscalDto) {}
 class IssueBody extends createZodDto(IssueInvoiceDto) {}
 class GlobalBody extends createZodDto(GlobalInvoiceDto) {}
 class CancelBody extends createZodDto(CancelInvoiceDto) {}
+class ResolveCancelBody extends createZodDto(z.object({ outcome: z.enum(['ACCEPTED', 'REJECTED']), note: z.string().min(3).max(300) })) {}
 class EmailBody extends createZodDto(z.object({ to: z.string().email().optional() })) {}
 class ListQuery extends createZodDto(InvoiceListQueryDto) {}
 const id = new ParseUUIDPipe();
@@ -42,6 +43,7 @@ class FiscalController {
     return r.xml;
   }
   @Post('invoices/:id/cancel') @HttpCode(200) @Require('fiscal.invoice.cancel') cancel(@Param('id', id) i: string, @Body() b: CancelBody) { return this.svc.cancel(i, b); }
+  @Post('invoices/:id/cancel/resolve') @HttpCode(200) @Require('fiscal.invoice.cancel') resolveCancel(@Param('id', id) i: string, @Body() b: ResolveCancelBody) { return this.svc.resolveCancel(i, b.outcome, b.note); }
   @Post('invoices/:id/email') @HttpCode(200) @Require('fiscal.invoice.issue') email(@Param('id', id) i: string, @Body() b: EmailBody) { return this.svc.emailInvoice(i, b.to); }
   @Post('invoices/:id/retry') @HttpCode(200) @Require('fiscal.invoice.issue') retry(@Param('id', id) i: string) { return this.svc.retry(i); }
 }

@@ -136,7 +136,7 @@ export class FiscalService {
   }
 
   private async assertInvoiceable(q: Tx, o: Dict, via: Via) {
-    if (o.payment_status !== 'PAID' || o.status === 'CANCELLED') throw new AppError('ORDER_NOT_INVOICEABLE', 409);
+    if (o.payment_status !== 'PAID' || o.status === 'CANCELLED' || Number(o.refunded_total) > 0) throw new AppError('ORDER_NOT_INVOICEABLE', 409);
     const active = (await q.query(`SELECT i.status, i.kind FROM invoice_orders io JOIN invoices i ON i.id = io.invoice_id WHERE io.order_id=$1 AND io.active`, [o.id])).rows[0];
     if (active) throw new AppError('INVOICE_EXISTS', 409, { kind: active.kind, status: active.status });
     const days = Number(await this.settings.get('fiscal.invoiceWindowDays', o.branch_id, 31));
@@ -272,6 +272,11 @@ export class FiscalService {
       this.assertBranch('fiscal.invoice.issue', i.branch_id);
       if (!['ERROR', 'PENDING'].includes(i.status)) throw new AppError('CONFLICT', 409, undefined, false, '🧾 Este comprobante ya fue procesado.');
       await this.requireConfigured(q);
+      // La venta pudo devolverse o cancelarse mientras el comprobante estaba en ERROR: no se timbra una venta ya sin efecto.
+      const bad = (await q.query(
+        `SELECT 1 FROM invoice_orders io JOIN orders o ON o.id = io.order_id
+          WHERE io.invoice_id=$1 AND (o.payment_status <> 'PAID' OR o.status = 'CANCELLED' OR o.refunded_total > 0)`, [invoiceId])).rowCount;
+      if (bad) throw new AppError('ORDER_NOT_INVOICEABLE', 409, undefined, false, '🧾 Una de las ventas ya fue devuelta o cancelada: no se puede timbrar.');
       try { await q.query('UPDATE invoice_orders SET active=true WHERE invoice_id=$1', [invoiceId]); }
       catch (e: any) { if (e.code === '23505') throw new AppError('INVOICE_EXISTS', 409); throw e; }
       await q.query(`UPDATE invoices SET status='PENDING', error_message=NULL WHERE id=$1`, [invoiceId]);
@@ -290,7 +295,7 @@ export class FiscalService {
       if (!b) throw notFound('branch');
       if (d.date >= b.bdate) throw new AppError('ORDER_NOT_INVOICEABLE', 409, undefined, false, '🧾 La factura global sólo puede emitirse de días ya cerrados.');
       const orders = (await q.query(
-        `SELECT o.* FROM orders o WHERE o.branch_id=$1 AND o.business_date=$2 AND o.payment_status='PAID' AND o.status <> 'CANCELLED'
+        `SELECT o.* FROM orders o WHERE o.branch_id=$1 AND o.business_date=$2 AND o.payment_status='PAID' AND o.status <> 'CANCELLED' AND o.refunded_total = 0
             AND NOT EXISTS (SELECT 1 FROM invoice_orders io WHERE io.order_id=o.id AND io.active) ORDER BY o.number FOR UPDATE OF o`, [d.branchId, d.date])).rows;
       if (!orders.length) throw new AppError('ORDER_NOT_INVOICEABLE', 409, undefined, false, '🧾 No hay tickets pendientes de facturar en esa fecha.');
       const parts: { folio: string; concepts: Concept[] }[] = []; const pays: { method: string; amount: number }[] = [];
@@ -340,6 +345,25 @@ export class FiscalService {
     return this.get(invoiceId, true);
   }
 
+  /**
+   * Resuelve una cancelación que quedó CANCEL_PENDING (el receptor debe aceptar ante el SAT).
+   * El resultado se captura a mano desde el portal del PAC/SAT: ACCEPTED libera la venta; REJECTED devuelve el CFDI a vigente.
+   */
+  async resolveCancel(invoiceId: string, outcome: 'ACCEPTED' | 'REJECTED', note: string) {
+    await this.db.tx(async (q) => {
+      const i = (await q.query('SELECT branch_id, status FROM invoices WHERE id=$1 FOR UPDATE', [invoiceId])).rows[0];
+      if (!i) throw notFound('invoice');
+      this.assertBranch('fiscal.invoice.cancel', i.branch_id);
+      if (i.status !== 'CANCEL_PENDING') throw new AppError('CONFLICT', 409, undefined, false, '🧾 Este comprobante no tiene una cancelación pendiente.');
+      if (outcome === 'ACCEPTED') {
+        await q.query(`UPDATE invoices SET status='CANCELLED', cancelled_at=now() WHERE id=$1`, [invoiceId]);
+        await q.query('UPDATE invoice_orders SET active=false WHERE invoice_id=$1', [invoiceId]);
+      } else await q.query(`UPDATE invoices SET status='STAMPED', cancel_motive=NULL, cancel_replacement_uuid=NULL WHERE id=$1`, [invoiceId]);
+      await this.audit.record(q, { action: 'invoice.cancel_resolved', entity: 'invoice', entityId: invoiceId, branchId: i.branch_id, reason: note, newValue: { outcome } });
+    });
+    return this.get(invoiceId, true);
+  }
+
   // ───────────────────────── consulta ─────────────────────────
   list(f: { branchId?: string; status?: string; q?: string; from?: string; to?: string; orderId?: string; limit: number; offset: number }) {
     const scope = ctx().principal!.branchScope('fiscal.invoice.read');
@@ -382,7 +406,7 @@ export class FiscalService {
   // ───────────────────────── autofactura (sitio público) ─────────────────────────
   private async orderByCode(q: Tx, code: string): Promise<Dict> {
     const o = (await q.query(
-      `SELECT o.id, o.number, o.business_date, o.total, o.payment_status, o.status, o.branch_id, b.name AS branch_name,
+      `SELECT o.id, o.number, o.business_date, o.total, o.refunded_total, o.payment_status, o.status, o.branch_id, b.name AS branch_name,
               ((now() AT TIME ZONE b.timezone)::date - o.business_date)::int AS age_days
          FROM orders o JOIN branches b ON b.id = o.branch_id WHERE o.invoice_code = $1`, [code.toUpperCase()])).rows[0];
     if (!o) throw notFound('ticket');
@@ -397,7 +421,7 @@ export class FiscalService {
         `SELECT i.id, i.kind, i.status, i.series, i.folio, i.uuid_sat AS uuid, i.receptor_rfc AS "receptorRfc", i.simulated FROM invoice_orders io JOIN invoices i ON i.id = io.invoice_id WHERE io.order_id=$1 AND io.active`, [o.id])).rows[0] ?? null;
       const days = Number(await this.settings.get('fiscal.invoiceWindowDays', o.branch_id, 31));
       let reason: string | null = null;
-      if (o.payment_status !== 'PAID' || o.status === 'CANCELLED') reason = 'NOT_PAID';
+      if (o.payment_status !== 'PAID' || o.status === 'CANCELLED' || Number(o.refunded_total) > 0) reason = 'NOT_PAID';
       else if (inv) reason = inv.kind === 'GLOBAL' ? 'IN_GLOBAL' : 'ALREADY_INVOICED';
       else if (o.age_days > days) reason = 'WINDOW_CLOSED';
       return { number: o.number, businessDate: o.business_date, total: o.total, branch: o.branch_name, items, invoice: inv, invoiceable: reason === null, reason, windowDays: days };

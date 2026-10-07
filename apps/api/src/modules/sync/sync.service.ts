@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { OrderCreateDto, AddItemsDto, CancelDto, PayDto } from '@retroburger/shared';
+import { OrderCreateDto, AddItemsDto, CancelDto, PayDto, PaymentInputDto } from '@retroburger/shared';
 import { DbService } from '../../database/db.service';
 import { AppError, forbidden, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
@@ -17,7 +17,8 @@ const uuid = z.string().uuid();
 const SCHEMAS = {
   ORDER_CREATE: OrderCreateDto.extend({ clientUuid: uuid }),
   ORDER_ADD_ITEMS: AddItemsDto.extend({ orderClientUuid: uuid }),
-  ORDER_PAY: PayDto.extend({ orderClientUuid: uuid }),
+  // offline el cobro DEBE traer clientUuid por pago: es lo que lo hace idempotente ante reintentos
+  ORDER_PAY: PayDto.extend({ orderClientUuid: uuid, payments: z.array(PaymentInputDto.extend({ clientUuid: uuid })).min(1).max(10) }),
   ORDER_CANCEL: CancelDto.extend({ orderClientUuid: uuid }),
 } as const;
 
@@ -31,8 +32,16 @@ export class SyncService {
   constructor(private readonly db: DbService, private readonly sales: SalesService, private readonly payments: PaymentsService, private readonly audit: AuditService,
     private readonly catalog: CatalogService, private readonly floor: FloorService, private readonly promos: PromotionsService, private readonly cash: CashService) {}
 
+  /** El PIN del supervisor se usa al aplicar, pero NUNCA se guarda: la bandeja de excepciones la ve cualquier usuario con readAll. */
+  private scrub(payload: Dict): Dict {
+    if (!payload || typeof payload !== 'object' || !('supervisor' in payload)) return payload;
+    const sup = payload.supervisor as Dict | undefined;
+    return { ...payload, supervisor: sup && typeof sup === 'object' ? { userCode: sup.userCode, pin: '[omitido]' } : undefined };
+  }
+
   private async orderIdByClientUuid(cu: string): Promise<string> {
-    const r = await this.db.tx(async (q) => (await q.query('SELECT id FROM orders WHERE client_uuid=$1', [cu])).rows[0]);
+    const r = await this.db.tx(async (q) => (await q.query(
+      `SELECT id FROM orders WHERE client_uuid=$1 UNION ALL SELECT order_id FROM order_client_aliases WHERE client_uuid=$1 LIMIT 1`, [cu])).rows[0]);
     if (!r) throw notFound('order');
     return r.id;
   }
@@ -43,14 +52,14 @@ export class SyncService {
     switch (type) {
       case 'ORDER_CREATE': { const o = await this.sales.create({ ...p, offline: true }); return { orderId: o.id, number: o.number }; }
       case 'ORDER_ADD_ITEMS': { const o = await this.sales.addItems(await this.orderIdByClientUuid(p.orderClientUuid), { items: p.items, send: p.send, offline: true }); return { orderId: o.id }; }
-      case 'ORDER_PAY': { const o = await this.payments.pay(await this.orderIdByClientUuid(p.orderClientUuid), { payments: p.payments }); return { orderId: o.id, paymentStatus: o.paymentStatus }; }
+      case 'ORDER_PAY': { const o = await this.payments.pay(await this.orderIdByClientUuid(p.orderClientUuid), { payments: p.payments, offline: true }); return { orderId: o.id, paymentStatus: o.paymentStatus }; }
       case 'ORDER_CANCEL': { const o = await this.sales.cancel(await this.orderIdByClientUuid(p.orderClientUuid), { reason: p.reason, supervisor: p.supervisor }); return { orderId: o.id }; }
     }
   }
 
   async push(d: { deviceId: string; branchId: string; operations: { opId: string; type: keyof typeof SCHEMAS; createdAt: string; payload: Dict }[] }) {
     if (!ctx().principal!.can('sales.order.create', d.branchId)) throw forbidden();
-    const ops = [...d.operations].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const ops = [...d.operations].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
     const results: Dict[] = [];
     for (const op of ops) {
       const prior = await this.db.tx(async (q) => (await q.query('SELECT status, result, error FROM sync_operations WHERE op_id=$1', [op.opId])).rows[0]);
@@ -60,7 +69,7 @@ export class SyncService {
         const result = await this.db.tx(async (q) => {
           const r = await this.apply(op.type, op.payload);
           await q.query(`INSERT INTO sync_operations (tenant_id, branch_id, device_id, op_id, type, payload, status, result, client_created_at, user_id) VALUES (app_tenant_id(),$1,$2,$3,$4,$5,'APPLIED',$6,$7,$8)`,
-            [d.branchId, d.deviceId, op.opId, op.type, JSON.stringify(op.payload), JSON.stringify(r), op.createdAt, ctx().principal!.userId]);
+            [d.branchId, d.deviceId, op.opId, op.type, JSON.stringify(this.scrub(op.payload)), JSON.stringify(r), op.createdAt, ctx().principal!.userId]);
           return r;
         });
         results.push({ opId: op.opId, status: 'APPLIED', result });
@@ -69,7 +78,7 @@ export class SyncService {
         const msg = e instanceof AppError ? `${e.code}: ${JSON.stringify(e.details ?? e.message)}` : (e as Error).message;
         await this.db.independent(async (q) => {
           await q.query(`INSERT INTO sync_operations (tenant_id, branch_id, device_id, op_id, type, payload, status, error, client_created_at, user_id) VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (tenant_id, op_id) DO NOTHING`,
-            [d.branchId, d.deviceId, op.opId, op.type, JSON.stringify(op.payload), malformed ? 'FAILED' : 'NEEDS_REVIEW', msg.slice(0, 1000), op.createdAt, ctx().principal!.userId]);
+            [d.branchId, d.deviceId, op.opId, op.type, JSON.stringify(this.scrub(op.payload)), malformed ? 'FAILED' : 'NEEDS_REVIEW', msg.slice(0, 1000), op.createdAt, ctx().principal!.userId]);
         });
         results.push({ opId: op.opId, status: malformed ? 'FAILED' : 'NEEDS_REVIEW', error: msg });
       }
@@ -93,21 +102,26 @@ export class SyncService {
          FROM sync_operations WHERE branch_id=$1 AND status IN ('NEEDS_REVIEW','FAILED') ORDER BY received_at DESC LIMIT 200`, [branchId])).rows);
   }
 
-  async retry(id: string) {
-    const op = await this.db.tx(async (q) => (await q.query('SELECT * FROM sync_operations WHERE id=$1', [id])).rows[0]);
+  async retry(id: string, supervisor?: { userCode: string; pin: string }) {
+    const op = await this.db.tx(async (q) => (await q.query('SELECT branch_id FROM sync_operations WHERE id=$1', [id])).rows[0]);
     if (!op) throw notFound('sync_operation');
     if (!ctx().principal!.can('sales.order.readAll', op.branch_id)) throw forbidden();
     try {
       const result = await this.db.tx(async (q) => {
-        const r = await this.apply(op.type, op.payload);
+        // Bloqueo de la fila + estado: dos reintentos simultáneos (o reintentar algo ya aplicado/resuelto) no reaplican la operación.
+        const cur = (await q.query('SELECT type, payload, status FROM sync_operations WHERE id=$1 FOR UPDATE', [id])).rows[0];
+        if (!['NEEDS_REVIEW', 'FAILED'].includes(cur.status)) throw new AppError('CONFLICT', 409, undefined, false, '⚠️ Esta operación ya fue aplicada o resuelta.');
+        const payload = supervisor ? { ...cur.payload, supervisor } : cur.payload;
+        const r = await this.apply(cur.type, payload);
         await q.query(`UPDATE sync_operations SET status='APPLIED', result=$2, error=NULL WHERE id=$1`, [id, JSON.stringify(r)]);
         await this.audit.record(q, { action: 'sync.retry_applied', entity: 'sync_operation', entityId: id, branchId: op.branch_id });
         return r;
       });
       return { status: 'APPLIED', result };
     } catch (e) {
+      if (e instanceof AppError && e.code === 'CONFLICT') throw e;
       const msg = e instanceof AppError ? `${e.code}: ${JSON.stringify(e.details ?? e.message)}` : (e as Error).message;
-      await this.db.independent(async (q) => { await q.query('UPDATE sync_operations SET error=$2 WHERE id=$1', [id, msg.slice(0, 1000)]); });
+      await this.db.independent(async (q) => { await q.query(`UPDATE sync_operations SET error=$2 WHERE id=$1 AND status IN ('NEEDS_REVIEW','FAILED')`, [id, msg.slice(0, 1000)]); });
       return { status: 'NEEDS_REVIEW', error: msg };
     }
   }

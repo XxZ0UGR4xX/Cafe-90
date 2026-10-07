@@ -250,14 +250,73 @@ describe('integridad: idempotencia, concurrencia y offline', () => {
     expect(await f.reconcile()).toEqual([]);
   });
 
-  it('venta offline sin stock se acepta, queda en revisión y no se pierde', async () => {
-    const r = await api.req('POST', '/orders', { token: f.tokens.mesero, body: orderBody([item(f.prod.cola)], { channel: 'TAKEAWAY', send: true, offline: true, clientUuid: randomUUID() }) });
+  it('venta offline sin stock se acepta vía sync, queda en revisión y no se pierde', async () => {
+    const cu = randomUUID();
+    const r = await api.req('POST', '/sync/push', { token: f.tokens.mesero, body: { deviceId: 'pos-x', branchId: f.branchId, operations: [
+      { opId: randomUUID(), type: 'ORDER_CREATE', createdAt: new Date().toISOString(), payload: orderBody([item(f.prod.cola)], { channel: 'TAKEAWAY', send: true, clientUuid: cu }) }] } });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
-    expect(r.body.needsReview).toBe(true);
+    expect(r.body.applied).toBe(1);
+    const o = (await f.sql('SELECT needs_review FROM orders WHERE client_uuid=$1', [cu]))[0];
+    expect(o.needs_review).toBe(true);
     expect(await f.stock('COLA')).toBe(-1);
     const inv = (await api.req('GET', `/inventory?branchId=${f.branchId}`, { token: f.tokens.almacen })).body.find((x: any) => x.name === 'COLA');
     expect(inv.status).toBe('OUT_OF_STOCK'); expect(inv.needsReview).toBe(true);
     expect(await f.reconcile()).toEqual([]);
+  });
+
+  it('el cliente no puede forzar `offline` por REST para saltarse el stock', async () => {
+    const r = await api.req('POST', '/orders', { token: f.tokens.mesero, body: orderBody([item(f.prod.cola)], { channel: 'TAKEAWAY', send: true, offline: true, clientUuid: randomUUID() }) });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('INSUFFICIENT_STOCK');
+  });
+});
+
+describe('auditoría: controles de dinero', () => {
+  const sup = () => ({ userCode: f.users.gerente!.userCode, pin: '1234' });
+
+  it('descuentos manuales acumulados respetan el umbral (no se evade con varios del 10 %)', async () => {
+    const o = (await api.req('POST', '/orders', { token: f.tokens.cajero, body: orderBody([item(f.prod.burger), item(f.prod.papas)], { channel: 'TAKEAWAY' }) })).body;
+    const d = (value: number, supervisor?: unknown) => api.req('POST', `/orders/${o.id}/discount`, { token: f.tokens.cajero, body: { kind: 'PERCENT', value, reason: 'Cortesía', supervisor } });
+    expect((await d(10)).status).toBe(201);
+    const second = await d(10);
+    expect(second.body.code).toBe('SUPERVISOR_REQUIRED');        // 10 % + 10 % = 20 % > umbral
+    expect((await d(10, sup())).status).toBe(201);               // con supervisor sí
+    const fixed = await api.req('POST', `/orders/${o.id}/discount`, { token: f.tokens.cajero, body: { kind: 'FIXED', value: 5, reason: 'Ajuste' } });
+    expect(fixed.body.code).toBe('SUPERVISOR_REQUIRED');         // el acumulado ya rebasa el umbral
+  });
+
+  it('un descuento fijo autoaprobado se revoca si la cuenta baja y supera el umbral', async () => {
+    const o = (await api.req('POST', '/orders', { token: f.tokens.cajero, body: orderBody([item(f.prod.burger), item(f.prod.burger)], { channel: 'TAKEAWAY' }) })).body;   // 258
+    const ok = await api.req('POST', `/orders/${o.id}/discount`, { token: f.tokens.cajero, body: { kind: 'FIXED', value: 25, reason: 'Ajuste' } });   // 9.7 %
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    const first = ok.body.items.find((i: any) => !i.parentItemId);
+    const after = await api.req('POST', `/orders/${o.id}/items/${first.id}/cancel`, { token: f.tokens.cajero, body: { reason: 'Error de captura' } });
+    expect(after.status, JSON.stringify(after.body)).toBe(201);
+    expect(after.body.discountTotal).toBe(0);                    // 25 sobre 129 = 19 % → revocado
+    expect((await f.sql(`SELECT count(*)::int n FROM audit_logs WHERE entity_id=$1 AND action='order.discount_revoked'`, [o.id]))[0].n).toBe(1);
+  });
+
+  it('devolución parcial: la venta sigue pagada y neta en reportes; idempotente y solo por el medio cobrado', async () => {
+    await closeShiftIfOpen(f.tokens.cajero); await openShift();
+    const o = (await api.req('POST', '/orders', { token: f.tokens.cajero, body: orderBody([item(f.prod.burger), item(f.prod.papas)], { channel: 'TAKEAWAY', send: true }) })).body;   // 178
+    expect((await api.req('POST', `/orders/${o.id}/pay`, { token: f.tokens.cajero, body: { payments: [{ method: 'CASH', amount: 178 }] } })).status).toBe(200);
+    const key = randomUUID();
+    const body = { method: 'CARD', amount: 50, reason: 'Producto frío', clientUuid: key, supervisor: sup() };
+    const wrong = await api.req('POST', `/orders/${o.id}/refund`, { token: f.tokens.cajero, body });
+    expect(wrong.body.code).toBe('PAYMENT_AMOUNT_MISMATCH');     // se cobró en efectivo
+    const ok = await api.req('POST', `/orders/${o.id}/refund`, { token: f.tokens.cajero, body: { ...body, method: 'CASH' } });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.paymentStatus).toBe('PAID'); expect(ok.body.paidTotal).toBe(128); expect(ok.body.refundedTotal).toBe(50); expect(ok.body.remaining).toBe(0);
+    const again = await api.req('POST', `/orders/${o.id}/refund`, { token: f.tokens.cajero, body: { ...body, method: 'CASH' } });
+    expect(again.body.idempotent).toBe(true);
+    expect((await f.sql(`SELECT count(*)::int n FROM payments WHERE order_id=$1 AND kind='REFUND'`, [o.id]))[0].n).toBe(1);
+    const dbl = await api.req('POST', `/orders/${o.id}/refund`, { token: f.tokens.cajero, body: { method: 'CASH', amount: 10, reason: 'Otro motivo', supervisor: sup() } });
+    expect(dbl.status).toBe(200);
+    const dbl2 = await api.req('POST', `/orders/${o.id}/refund`, { token: f.tokens.cajero, body: { method: 'CASH', amount: 10, reason: 'Otro motivo', supervisor: sup() } });
+    expect(dbl2.status).toBe(409);                               // mismo importe en segundos sin clientUuid = doble clic
+    const pay = await api.req('POST', `/orders/${o.id}/pay`, { token: f.tokens.cajero, body: { payments: [{ method: 'CASH', amount: 50 }] } });
+    expect(pay.status).toBe(409);                                // no se vuelve a cobrar
+    await closeShiftIfOpen(f.tokens.cajero);
   });
 });
 

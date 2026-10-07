@@ -116,7 +116,7 @@ export class SalesService {
     this.assertBranch('sales.order.create', d.branchId);
     return this.db.tx(async (q) => {
       if (d.clientUuid) {   // idempotencia (reintentos y sincronización offline)
-        const ex = (await q.query('SELECT id FROM orders WHERE client_uuid=$1', [d.clientUuid])).rows[0];
+        const ex = (await q.query(`SELECT id FROM orders WHERE client_uuid=$1 UNION ALL SELECT order_id FROM order_client_aliases WHERE client_uuid=$1 LIMIT 1`, [d.clientUuid])).rows[0];
         if (ex) return { ...(await this.get(ex.id, q)), idempotent: true };
       }
       const b = (await q.query(`SELECT id, status, ((now() AT TIME ZONE timezone) - business_day_cutoff::interval)::date AS bdate FROM branches WHERE id=$1 AND deleted_at IS NULL`, [d.branchId])).rows[0];
@@ -136,8 +136,13 @@ export class SalesService {
           await q.query(`UPDATE tables SET status='OCCUPIED' WHERE id=$1`, [tableId]);
           await this.events.emit(q, { type: 'TableChanged', branchId: d.branchId, payload: { tableId, status: 'OCCUPIED' } });
         } else {
-          const existing = (await q.query(`SELECT id FROM orders WHERE table_session_id=$1 AND status NOT IN ('CANCELLED','COMPLETED') AND payment_status <> 'PAID' ORDER BY created_at LIMIT 1`, [s.id])).rows[0];
-          if (existing) return this.addItems(existing.id, { items: d.items, send: d.send, offline: d.offline }, q);
+          // Un pedido por QR (anónimo) NUNCA se agrega a la cuenta del personal: va en su propia orden de la misma sesión
+          const existing = (await q.query(`SELECT id FROM orders WHERE table_session_id=$1 AND status NOT IN ('CANCELLED','COMPLETED') AND payment_status <> 'PAID'
+              AND (($2::text = 'QR') = (source = 'QR')) ORDER BY created_at LIMIT 1`, [s.id, d.source ?? 'STAFF'])).rows[0];
+          if (existing) {
+            if (d.clientUuid) await q.query('INSERT INTO order_client_aliases (tenant_id, client_uuid, order_id) VALUES (app_tenant_id(),$1,$2) ON CONFLICT DO NOTHING', [d.clientUuid, existing.id]);
+            return this.addItems(existing.id, { items: d.items, send: d.send, offline: d.offline }, q);
+          }
         }
         sessionId = s.id;
       }
@@ -205,6 +210,7 @@ export class SalesService {
       const qty = d.qty ?? it.qty;
       await q.query(`UPDATE order_items SET qty=$2::int, notes = CASE WHEN $3::boolean AND id = $1::uuid THEN $4::text ELSE notes END, line_total = unit_price * $2::int WHERE id=$1::uuid OR parent_item_id=$1::uuid`, [itemId, qty, 'notes' in d, d.notes ?? null]);
       await this.recalc(q, orderId);
+      await this.enforceDiscountLimit(q, orderId, o.branch_id);
       return this.get(orderId, q);
     });
   }
@@ -223,6 +229,7 @@ export class SalesService {
       for (const row of ids) await this.cancelSentItem(q, row.id, row.status, d.reason);
       await q.query(`UPDATE order_items SET status='CANCELLED' WHERE id = ANY($1::uuid[])`, [ids.map((r) => r.id)]);
       await this.recalc(q, orderId);
+      await this.enforceDiscountLimit(q, orderId, o.branch_id);
       await this.audit.record(q, { action: 'order.cancel_item', entity: 'order_item', entityId: itemId, branchId: o.branch_id, oldValue: { name: it.name, qty: it.qty, status: it.status }, reason: d.reason, newValue: { authorizedBy: authBy } });
       await this.afterItemsChanged(q, orderId);
       return this.get(orderId, q);
@@ -330,18 +337,49 @@ export class SalesService {
   }
 
   // ───────────────────────── descuentos ─────────────────────────
+  /** Umbral (%) de descuento manual sin supervisor. Un valor inválido NUNCA desactiva el control: cae al 10 %. */
+  private async discountThreshold(branchId: string): Promise<number> {
+    const n = Number(await this.settings.get('sales.discountThresholdPct', branchId, 10));
+    return Number.isFinite(n) && n >= 0 ? n : 10;
+  }
+
+  /**
+   * Tras reducir la cuenta (cancelar/cambiar partidas, dividir) un descuento fijo ya aplicado pesa más en proporción.
+   * Los descuentos manuales autoaprobados que superen el umbral se revocan (más recientes primero); los autorizados por supervisor se conservan.
+   */
+  private async enforceDiscountLimit(q: Tx, orderId: string, branchId: string) {
+    const threshold = await this.discountThreshold(branchId);
+    for (;;) {
+      const o = (await q.query('SELECT subtotal FROM orders WHERE id=$1', [orderId])).rows[0];
+      const subtotal = amountToCents(o.subtotal);
+      if (!subtotal) return;
+      const rows = (await q.query(`SELECT id, kind, value, amount, self_approved FROM order_discounts WHERE order_id=$1 AND kind IN ('PERCENT','FIXED') ORDER BY created_at DESC, id DESC`, [orderId])).rows;
+      const total = rows.reduce((a, r) => a + amountToCents(r.amount), 0);
+      if ((total / subtotal) * 100 <= threshold) return;
+      const revocable = rows.find((r) => r.self_approved);
+      if (!revocable) return;
+      await q.query('DELETE FROM order_discounts WHERE id=$1', [revocable.id]);
+      await this.audit.record(q, { action: 'order.discount_revoked', entity: 'order', entityId: orderId, branchId, oldValue: { kind: revocable.kind, value: revocable.value, amount: revocable.amount }, reason: 'Excede el umbral tras cambiar la cuenta' });
+      await this.recalc(q, orderId);
+    }
+  }
+
   async discount(orderId: string, d: Dict) {
     return this.db.tx(async (q) => {
       const o = await this.lockOrder(q, orderId);
       this.assertBranch('sales.discount.apply', o.branch_id);
-      if (['CANCELLED', 'COMPLETED'].includes(o.status) || o.payment_status === 'PAID') throw new AppError('ORDER_INVALID_TRANSITION', 409);
+      if (['CANCELLED', 'COMPLETED'].includes(o.status) || o.payment_status === 'PAID' || o.paid_total > 0)
+        throw new AppError('ORDER_INVALID_TRANSITION', 409, undefined, false, '⚠️ La cuenta ya tiene pagos: no se pueden aplicar descuentos.');
       const subtotal = amountToCents(o.subtotal);
       const amount = discountCents(d.kind, d.value, subtotal);
-      const pct = subtotal ? (amount / subtotal) * 100 : 0;
-      const threshold = Number(await this.settings.get('sales.discountThresholdPct', o.branch_id, 10));
-      const authBy = pct > threshold ? await this.supervisor.authorize('sales.discount.override', o.branch_id, d.supervisor) : ctx().principal!.userId;
-      await q.query(`INSERT INTO order_discounts (tenant_id, order_id, kind, value, amount, reason, authorized_by, created_by) VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7)`,
-        [orderId, d.kind, d.value, centsToAmount(amount), d.reason, authBy, ctx().principal!.userId]);
+      // Umbral sobre el ACUMULADO de descuentos manuales (existentes + nuevo): varios descuentos pequeños no eluden al supervisor.
+      const manual = amountToCents((await q.query(`SELECT COALESCE(sum(amount),0) AS s FROM order_discounts WHERE order_id=$1 AND kind IN ('PERCENT','FIXED')`, [orderId])).rows[0].s);
+      const pct = subtotal ? ((manual + amount) / subtotal) * 100 : 0;
+      const threshold = await this.discountThreshold(o.branch_id);
+      const selfApproved = pct <= threshold;
+      const authBy = selfApproved ? ctx().principal!.userId : await this.supervisor.authorize('sales.discount.override', o.branch_id, d.supervisor);
+      await q.query(`INSERT INTO order_discounts (tenant_id, order_id, kind, value, amount, reason, authorized_by, created_by, self_approved) VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8)`,
+        [orderId, d.kind, d.value, centsToAmount(amount), d.reason, authBy, ctx().principal!.userId, selfApproved]);
       await this.recalc(q, orderId);
       await this.audit.record(q, { action: 'order.discount', entity: 'order', entityId: orderId, branchId: o.branch_id, newValue: { ...d, supervisor: undefined, amount: centsToAmount(amount), authorizedBy: authBy }, reason: d.reason });
       return this.get(orderId, q);
@@ -410,6 +448,7 @@ export class SalesService {
          SELECT tenant_id, branch_id, $2, business_date, channel, status, table_session_id, table_id, customer_id, customer_name, waiter_id, guests, created_by, sent_at FROM orders WHERE id=$1 RETURNING id`, [orderId, number])).rows[0];
       await q.query(`UPDATE order_items SET order_id=$2 WHERE id = ANY($1::uuid[]) OR parent_item_id = ANY($1::uuid[])`, [top, n.id]);
       await this.recalc(q, orderId); await this.recalc(q, n.id);
+      await this.enforceDiscountLimit(q, orderId, o.branch_id); await this.enforceDiscountLimit(q, n.id, o.branch_id);
       await this.audit.record(q, { action: 'order.split', entity: 'order', entityId: orderId, branchId: o.branch_id, newValue: { newOrderId: n.id, items: top.length } });
       return { source: await this.get(orderId, q), created: await this.get(n.id, q) };
     });
@@ -422,7 +461,7 @@ export class SalesService {
         `SELECT o.id, o.branch_id AS "branchId", o.number, o.business_date AS "businessDate", o.channel, o.status, o.payment_status AS "paymentStatus",
                 o.table_session_id AS "tableSessionId", o.table_id AS "tableId", t.number AS "tableNumber", o.customer_id AS "customerId", o.customer_name AS "customerName",
                 o.waiter_id AS "waiterId", w.full_name AS "waiterName", o.guests, o.subtotal, o.discount_total AS "discountTotal", o.tax_total AS "taxTotal", o.tip_total AS "tipTotal",
-                o.total, o.paid_total AS "paidTotal", o.notes, o.needs_review AS "needsReview", o.cancel_reason AS "cancelReason", o.created_at AS "createdAt", o.sent_at AS "sentAt", o.closed_at AS "closedAt",
+                o.total, o.paid_total AS "paidTotal", o.refunded_total AS "refundedTotal", o.notes, o.needs_review AS "needsReview", o.cancel_reason AS "cancelReason", o.created_at AS "createdAt", o.sent_at AS "sentAt", o.closed_at AS "closedAt",
                 o.version, o.source, o.client_uuid AS "clientUuid", ${ctx().principal!.can('catalog.cost.read', undefined) ? 'o.cost_total' : 'NULL::numeric'} AS "costTotal"
            FROM orders o LEFT JOIN tables t ON t.id = o.table_id LEFT JOIN users w ON w.id = o.waiter_id WHERE o.id=$1`, [id])).rows[0];
       if (!o) throw notFound('order');
@@ -436,7 +475,7 @@ export class SalesService {
       o.items = items;
       o.payments = (await q.query(`SELECT id, kind, method, amount, tip, reference, at FROM payments WHERE order_id=$1 ORDER BY at`, [id])).rows;
       o.discounts = (await q.query(`SELECT id, kind, value, amount, reason FROM order_discounts WHERE order_id=$1 ORDER BY created_at`, [id])).rows;
-      o.remaining = r4(Math.max(o.total - o.paidTotal, 0));
+      o.remaining = o.paymentStatus === 'PAID' || o.status === 'CANCELLED' ? 0 : r4(Math.max(o.total - o.paidTotal, 0));
       return o;
     };
     return tx ? run(tx) : this.db.tx(run);

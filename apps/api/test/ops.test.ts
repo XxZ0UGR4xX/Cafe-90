@@ -222,7 +222,7 @@ describe('sincronización offline', () => {
     const body = { deviceId: 'pos-1', branchId: f.branchId, operations: [
       { opId: opPay, type: 'ORDER_PAY', createdAt: new Date(Date.now() - 1000).toISOString(), payload: { orderClientUuid: cu, payments: [{ method: 'CASH', amount: 49, clientUuid: payUuid }] } },
       { opId: opCreate, type: 'ORDER_CREATE', createdAt: new Date(Date.now() - 5000).toISOString(), payload: { clientUuid: cu, branchId: f.branchId, channel: 'TAKEAWAY', send: true, items: [item(f.prod.papas)] } },
-      { opId: opBad, type: 'ORDER_PAY', createdAt: new Date().toISOString(), payload: { orderClientUuid: randomUUID(), payments: [{ method: 'CASH', amount: 10 }] } },
+      { opId: opBad, type: 'ORDER_PAY', createdAt: new Date().toISOString(), payload: { orderClientUuid: randomUUID(), payments: [{ method: 'CASH', amount: 10, clientUuid: randomUUID() }] } },
     ] };
     const r = await post('/sync/push', f.tokens.cajero, body);
     expect(r.status, JSON.stringify(r.body)).toBe(201);
@@ -235,6 +235,7 @@ describe('sincronización offline', () => {
     expect(ex).toHaveLength(1); expect(ex[0].type).toBe('ORDER_PAY');
     const retry = await post(`/sync/exceptions/${ex[0].id}/retry`, f.tokens.gerente);
     expect(retry.body.status).toBe('NEEDS_REVIEW');
+    expect(JSON.stringify(ex[0].payload)).not.toContain('pin');
     expect((await post(`/sync/exceptions/${ex[0].id}/resolve`, f.tokens.gerente, { note: 'Orden inexistente, ignorada por el gerente' })).body.status).toBe('RESOLVED');
     expect((await get(`/sync/exceptions?branchId=${f.branchId}`, f.tokens.gerente)).body).toHaveLength(0);
   });

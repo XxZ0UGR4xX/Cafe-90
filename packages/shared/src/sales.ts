@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { ORDER_CHANNELS, PAYMENT_METHODS } from './states';
 
 const uuid = z.string().uuid();
-const amount = z.number().positive().max(99_999_999);
+const isCents = (v: number) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6;
+const amount = z.number().finite().positive().max(99_999_999).refine(isCents, 'máximo 2 decimales');
 
 export const SupervisorAuthDto = z.object({ userCode: z.string().min(1).max(40), pin: z.string().regex(/^\d{4,6}$/) });
 
@@ -35,19 +36,20 @@ export const ItemCancelDto = z.object({ reason: z.string().min(3).max(200), supe
 
 export const PaymentInputDto = z.object({
   method: z.enum(PAYMENT_METHODS), amount,
-  tip: z.number().min(0).max(9_999_999).default(0),
-  tendered: z.number().positive().optional(),
+  tip: z.number().finite().min(0).max(9_999_999).refine(isCents, 'máximo 2 decimales').default(0),
+  tendered: z.number().finite().positive().max(99_999_999).refine(isCents, 'máximo 2 decimales').optional(),
   reference: z.string().max(80).optional(),
   clientUuid: uuid.optional(),
 });
 export const PayDto = z.object({ payments: z.array(PaymentInputDto).min(1).max(10) });
 export const DiscountDto = z.object({
-  kind: z.enum(['PERCENT', 'FIXED']), value: z.number().positive().max(99_999_999),
+  kind: z.enum(['PERCENT', 'FIXED']), value: z.number().finite().positive().max(99_999_999).refine(isCents, 'máximo 2 decimales'),
   reason: z.string().min(3).max(200), supervisor: SupervisorAuthDto.optional(),
 });
 export const CancelDto = z.object({ reason: z.string().min(3).max(200), supervisor: SupervisorAuthDto.optional() });
 export const RefundDto = z.object({
   amount: amount.optional(), method: z.enum(PAYMENT_METHODS), reason: z.string().min(3).max(200), supervisor: SupervisorAuthDto.optional(),
+  clientUuid: uuid.optional(),   // idempotencia: un doble clic o reintento no devuelve dos veces
 });
 export const SplitItemsDto = z.object({ itemIds: z.array(uuid).min(1).max(100) });
 export const OrderListDto = z.object({
