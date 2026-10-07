@@ -48,7 +48,7 @@ jobs:
       - name: Web pública
         run: docker build -f apps/web-admin/Dockerfile --build-arg APP=web-public --build-arg VITE_API_URL=https://api.example.com --build-arg VITE_TENANT=demo -t retroburger-public:ci .
       - name: La imagen de la API arranca (falla rápido si falta algo en tiempo de ejecución)
-        run: docker run --rm -e NODE_ENV=production -e DATABASE_URL=postgres://x:y@localhost:5432/z -e JWT_ACCESS_SECRET=ci-secret-ci-secret-ci-secret-1234 -e MFA_ENCRYPTION_KEY=ci-key-ci-key-ci-key-ci-key-ci-key-12 retroburger-api:ci node -e "require('./dist/config/env').loadEnv(); console.log('env OK')"
+        run: docker run --rm -e NODE_ENV=production -e COOKIE_SECURE=true -e CORS_ORIGINS=https://admin.ci.test -e DATABASE_URL=postgres://x:y@localhost:5432/z -e JWT_ACCESS_SECRET=ci-secret-ci-secret-ci-secret-1234 -e MFA_ENCRYPTION_KEY=ci-key-ci-key-ci-key-ci-key-ci-key-12 retroburger-api:ci node -e "require('./dist/config/env').loadEnv(); console.log('env OK')"
       - name: Los compose (producción y demo) son válidos
         run: |
           cat > /tmp/ci.env <<'ENV'
