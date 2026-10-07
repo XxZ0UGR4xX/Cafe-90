@@ -22,7 +22,7 @@ export function MenuPage({ info }: { info: any }) {
   if (!info || menu.isLoading) return <RetroSpinner />;
   return (
     <div className="rb-col">
-      <div className="rb-hero"><div style={{ fontSize: '3rem' }}>🍔🍟🥤</div><h1>RETROBURGER</h1><p>THE 90s BURGER EXPERIENCE · PIDE PARA RECOGER O A DOMICILIO</p></div>
+      <div className="rb-hero"><div>🍔🍟🥤</div><h1>Retro <em>Burger</em></h1><p>Hamburguesas de diner · pide para recoger o a domicilio</p></div>
       <RetroSelect aria-label="Sucursal" label="Sucursal" value={cart.branchId ?? ''} onChange={(e) => cart.setBranch(e.target.value)} options={branches.map((b: any) => ({ value: b.id, label: `${b.name} — ${b.address ?? ''}` }))} />
       {menu.error ? <RetroCard title="⚠️" tone="red">No pudimos cargar el menú. Inténtalo de nuevo en un momento.</RetroCard> : menu.data && (
         <MenuBrowser menu={menu.data}>{(lines) => lines.length > 0 && (

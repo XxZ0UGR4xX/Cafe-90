@@ -17,7 +17,7 @@ test('accesibilidad: login y pantallas del admin sin violaciones serias/crítica
   await page.goto('/'); await page.waitForSelector('form');
   report['Login'] = await scan(page);
   await page.getByLabel('Correo').fill('admin@retroburger.test'); await page.getByLabel('Contraseña').fill('Retro90!Burger');
-  await page.getByRole('button', { name: /press start/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
   for (const [path, name] of ROUTES) {
     // navegación dentro de la SPA (el tiempo real mantiene conexiones abiertas: «networkidle» nunca llega)
     await page.locator(`.rb-sidebar a[href="${path}"]`).click(); await page.waitForTimeout(900);
@@ -44,7 +44,7 @@ test('accesibilidad: diálogos y pestañas (producto, cobro, mesa, pedido, factu
   const report: Record<string, unknown[]> = {};
   const check = async (name: string) => { await page.waitForTimeout(500); report[name] = await scan(page); };
   await page.goto('/'); await page.getByLabel('Correo').fill('admin@retroburger.test'); await page.getByLabel('Contraseña').fill('Retro90!Burger');
-  await page.getByRole('button', { name: /press start/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
   const go = async (path: string) => { await page.locator(`.rb-sidebar a[href="${path}"]`).click(); await page.waitForTimeout(800); };
 
   await go('/settings');

@@ -118,3 +118,10 @@ export function RetroSpinner({ label = 'Cargando…' }: { label?: string }) {
   return <div className="rb-row" role="status" style={{ justifyContent: 'center', padding: 24 }}><span className="rb-spinner" style={{ fontSize: 28 }} /><span className="rb-arcade">{label}</span></div>;
 }
 export function RetroEmpty({ icon = '🍟', children }: { icon?: string; children: ReactNode }) { return <div className="rb-empty"><div className="big">{icon}</div>{children}</div>; }
+
+
+/** Logotipo de letrero cursivo: «RETROBURGER» se compone como «Retro Burger» (la segunda palabra en rojo cereza). */
+export function RetroLogo({ name = 'RETROBURGER', className }: { name?: string; className?: string }) {
+  const m = /^(retro)(burger)$/i.exec(name.trim());
+  return <span className={cx('rb-logo', className)}>{m ? <>Retro <em>Burger</em></> : name}</span>;
+}

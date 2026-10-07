@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 const S = 'shots';
 async function login(page: Page, email: string, password = 'Retro90!Staff') {
   await page.goto('/'); await page.getByLabel('Correo').fill(email); await page.getByLabel('Contraseña').fill(password);
-  await page.getByRole('button', { name: /press start/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
 }
 
 test('venta completa: mesa → POS → cocina (KDS) → cobro → caja', async ({ page, browser }) => {

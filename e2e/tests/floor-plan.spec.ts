@@ -12,7 +12,7 @@ test('plano: arrastrar una mesa a un lugar libre se guarda; encimar otra la devu
 
   await page.goto('/');
   await page.getByLabel('Correo').fill('admin@retroburger.test'); await page.getByLabel('Contraseña').fill('Retro90!Burger');
-  await page.getByRole('button', { name: /press start/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
   await page.getByRole('link', { name: /Mesas/ }).click();
   await page.getByRole('button', { name: /🗺️ Plano/ }).click();
   await expect(page.getByTestId('plan-table-1')).toBeVisible();

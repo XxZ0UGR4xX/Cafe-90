@@ -16,7 +16,7 @@ function totp(secretB32: string, offsetSteps = 0): string {
 async function signIn(page: Page, email: string, password: string) {
   await page.goto('/');
   await page.getByLabel('Correo').fill(email); await page.getByLabel('Contraseña').fill(password);
-  await page.getByRole('button', { name: /press start/i }).click();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click();
 }
 
 test('2FA: activar en Seguridad, cerrar sesión, entrar con código y con código de recuperación', async ({ page, request }) => {

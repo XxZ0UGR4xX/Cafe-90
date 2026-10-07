@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { applyJsonLd, applyMeta, metaFor, restaurantJsonLd } from './seo';
 import { useQuery } from '@tanstack/react-query';
+import { RetroLogo } from '@retroburger/ui';
 import { api } from './api';
 import { MenuPage } from './pages/MenuPage';
 import { TrackPage } from './pages/TrackPage';
@@ -20,7 +21,7 @@ export function App() {
     <>
       <header style={{ background: 'var(--ink)', color: 'var(--cream)' }}>
         <div className="rb-row rb-wrap" style={{ maxWidth: 1100, margin: '0 auto', padding: '10px 16px' }}>
-          <Link to="/" className="rb-display" style={{ color: 'var(--mustard)', fontSize: '1.5rem', textDecoration: 'none', textShadow: '0 0 10px rgba(246,184,0,.5)' }}>🍔 RETROBURGER</Link>
+          <Link to="/" className="rb-sitelogo" aria-label="RetroBurger, inicio"><RetroLogo name="RETROBURGER" /></Link>
           <nav className="rb-row rb-wrap rb-end"><NavLink to="/" end className={nav}>Menú</NavLink><NavLink to="/reservar" className={nav}>Reservar</NavLink><NavLink to="/puntos" className={nav}>Mis puntos</NavLink><NavLink to="/factura" className={nav}>Facturar</NavLink></nav>
         </div>
         <div className="rb-checker" />
@@ -35,7 +36,7 @@ export function App() {
           <Route path="/m/:token" element={<QrPage />} />
         </Routes>
       </main>
-      <footer className="rb-hint" style={{ textAlign: 'center', padding: 24 }}>© RETROBURGER · THE 90s BURGER EXPERIENCE</footer>
+      <footer className="rb-hint" style={{ textAlign: 'center', padding: 24 }}>© RETROBURGER · HAMBURGUESAS DE DINER</footer>
     </>
   );
 }

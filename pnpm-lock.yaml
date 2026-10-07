@@ -297,8 +297,14 @@ importers:
       '@fontsource/jetbrains-mono':
         specifier: ^5.1.0
         version: 5.3.0
+      '@fontsource/oswald':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/press-start-2p':
         specifier: ^5.1.0
+        version: 5.3.0
+      '@fontsource/yellowtail':
+        specifier: ^5.3.0
         version: 5.3.0
     devDependencies:
       '@testing-library/react':
@@ -1402,8 +1408,14 @@ packages:
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
 
+  '@fontsource/oswald@5.3.0':
+    resolution: {integrity: sha512-16r2aHActe0pH+9FLdk/74/YxXM7HpGak05kAzx3RvSToiJwGvyhv6GvckPz+YuZmvL1nxWbEop2jAXRcXYPRg==}
+
   '@fontsource/press-start-2p@5.3.0':
     resolution: {integrity: sha512-gxWFxdeDglPhEYSwEeooomcaFK8kSQYLQwVxfnOJeYRj2sPEHXjpVtFgEaYfqzOjuAJGrIcJOipu2KY5YkbyuQ==}
+
+  '@fontsource/yellowtail@5.3.0':
+    resolution: {integrity: sha512-atz4CIdbP7otppxRaObJiygnkyJzIuLFpPRjWspXvXhBWLB0sk35cCu5r6gSkDomRtEWakJ8//bWbyBjJbilGg==}
 
   '@ioredis/commands@2.0.0':
     resolution: {integrity: sha512-vrx0AE/T0h7cRZwfo1M39Cr+ZhZrkf0V8mQN75wucKCxCLD9l/VX6no3gFvrLqD1IlG/1LtzWovqEw3t0Vr9zg==}
@@ -5308,7 +5320,11 @@ snapshots:
 
   '@fontsource/jetbrains-mono@5.3.0': {}
 
+  '@fontsource/oswald@5.3.0': {}
+
   '@fontsource/press-start-2p@5.3.0': {}
+
+  '@fontsource/yellowtail@5.3.0': {}
 
   '@ioredis/commands@2.0.0': {}
 

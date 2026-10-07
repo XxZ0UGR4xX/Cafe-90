@@ -17,7 +17,7 @@ const pages = {
 export function App() {
   const { status, me, bootstrap, can } = useSession();
   useEffect(() => { void bootstrap(); }, [bootstrap]);
-  if (status === 'loading') return <div className="rb-login"><RetroSpinner label="INSERT COIN…" /></div>;
+  if (status === 'loading') return <div className="rb-login"><RetroSpinner label="Abriendo el diner…" /></div>;
   if (status === 'anon' || !me) return <Routes><Route path="*" element={<Login />} /></Routes>;
   return (
     <Routes>

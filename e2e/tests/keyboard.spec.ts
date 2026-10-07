@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 // `fill()` no lo detecta (no depende del foco): aquí se teclea como una persona.
 test('modal: se puede teclear de corrido en cualquier campo y el Tab no se escapa del diálogo', async ({ page }) => {
   await page.goto('/'); await page.getByLabel('Correo').fill('admin@retroburger.test'); await page.getByLabel('Contraseña').fill('Retro90!Burger');
-  await page.getByRole('button', { name: /press start/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
   await page.locator('.rb-sidebar a[href="/customers"]').click(); await page.getByRole('button', { name: '+ Cliente' }).click();
   await page.getByLabel('Teléfono').click(); await page.keyboard.type('5551234567', { delay: 25 });
   expect(await page.getByLabel('Teléfono').inputValue()).toBe('5551234567');

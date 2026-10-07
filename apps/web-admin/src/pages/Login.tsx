@@ -69,8 +69,8 @@ export function Login() {
   return (
     <div className="rb-login">
       <div className="rb-login__card rb-col">
-        <div className="rb-hero"><div style={{ fontSize: '3.4rem' }}>🍔🍟🥤</div><h1>RETROBURGER</h1><p>ERP · POS · KDS — THE 90s BURGER EXPERIENCE</p></div>
-        <RetroCard title="🕹️ Insert coin · Iniciar sesión" tone="red">
+        <div className="rb-hero"><div>🍔🍟🥤</div><h1>Retro <em>Burger</em></h1><p>ERP · POS · KDS — diner de los 50</p></div>
+        <RetroCard title="🍒 Bienvenido · Iniciar sesión" tone="red">
           <form className="rb-col" onSubmit={submit}>
             <RetroInput label="Restaurante" value={tenant} onChange={(e) => setTenant(e.target.value)} autoCapitalize="none" autoCorrect="off" required />
             <RetroTabs tabs={[{ key: 'email', label: 'Correo' }, { key: 'pin', label: 'PIN rápido' }]} value={tab} onChange={(k) => { setTab(k); setError(null); }} />
@@ -82,7 +82,7 @@ export function Login() {
               <PinPad value={pin} onChange={setPin} onSubmit={() => void submit()} />
             </>)}
             {error && <div className="rb-error-text" role="alert" style={{ fontSize: '.95rem' }}>{error}</div>}
-            {tab === 'email' && <RetroButton type="submit" variant="neon" size="lg" block loading={busy}>▶ Press start</RetroButton>}
+            {tab === 'email' && <RetroButton type="submit" variant="neon" size="lg" block loading={busy}>▶ Entrar</RetroButton>}
           </form>
         </RetroCard>
       </div>

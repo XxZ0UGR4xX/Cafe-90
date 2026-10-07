@@ -1,17 +1,17 @@
 import { type ReactNode, useEffect } from 'react';
 import { NavLink } from './nav-link';
-import { RetroButton, cx } from './core';
+import { RetroButton, RetroLogo, cx } from './core';
 
 export interface NavItem { to: string; icon: string; label: string; badge?: ReactNode }
 export type NavEntry = NavItem | 'sep';
 
 // ───────────── RetroSidebar (gabinete arcade) ─────────────
-export function RetroSidebar({ items, collapsed, onToggle, footer, brand = 'RETROBURGER', tagline = 'THE 90s BURGER EXP.' }: {
+export function RetroSidebar({ items, collapsed, onToggle, footer, brand = 'RETROBURGER', tagline = 'DINER · POS · ERP' }: {
   items: NavEntry[]; collapsed: boolean; onToggle: () => void; footer?: ReactNode; brand?: string; tagline?: string;
 }) {
   return (
     <aside className="rb-sidebar" aria-label="Navegación principal">
-      <div className="rb-brand"><span style={{ fontSize: '1.6rem' }}>🍔</span><span className="rb-brand__text">{brand}<small>{tagline}</small></span></div>
+      <div className="rb-brand"><span style={{ fontSize: '1.6rem' }}>🍔</span><span className="rb-brand__text"><RetroLogo name={brand} /><small>{tagline}</small></span></div>
       <nav className="rb-nav">
         {items.map((it, i) => it === 'sep' ? <div key={`s${i}`} className="rb-nav-sep" /> : (
           <NavLink key={it.to} to={it.to} title={collapsed ? it.label : undefined}><span className="ico">{it.icon}</span><span className="lbl">{it.label}</span>{it.badge}</NavLink>

@@ -24,7 +24,7 @@ async function paidOrder(request: any) {
 async function signIn(page: Page) {
   await page.goto('/');
   await page.getByLabel('Correo').fill('admin@retroburger.test'); await page.getByLabel('Contraseña').fill('Retro90!Burger');
-  await page.getByRole('button', { name: /press start/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
+  await page.getByRole('button', { name: /^▶ entrar/i }).click(); await expect(page.locator('.rb-sidebar')).toBeVisible();
 }
 
 test('Pedidos → Facturar: valida datos, timbra (simulado) y muestra la factura', async ({ page, request }) => {
