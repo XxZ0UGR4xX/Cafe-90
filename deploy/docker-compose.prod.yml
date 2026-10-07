@@ -67,7 +67,7 @@ services:
   web-public:
     build: { context: .., dockerfile: apps/web-admin/Dockerfile, args: { APP: web-public, VITE_API_URL: "https://${API_HOST}", VITE_TENANT: "${PUBLIC_TENANT:?define PUBLIC_TENANT (slug del restaurante)}" } }
     restart: unless-stopped
-    environment: { API_ORIGIN: "https://${API_HOST}", API_WS_ORIGIN: "wss://${API_HOST}" }
+    environment: { API_ORIGIN: "https://${API_HOST}", API_WS_ORIGIN: "wss://${API_HOST}", PUBLIC_ORIGIN: "https://${PUBLIC_HOST}", ROBOTS_TAG: "all" }", API_WS_ORIGIN: "wss://${API_HOST}" }
     networks: [edge]
 
   proxy:                           # TLS automático (Let's Encrypt) y único servicio expuesto

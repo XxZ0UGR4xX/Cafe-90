@@ -26,7 +26,9 @@ ARG APP=web-admin
 COPY apps/web-admin/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY apps/web-admin/security.inc.template /etc/nginx/templates/security.inc.template
 COPY --from=build /repo/apps/${APP}/dist /usr/share/nginx/html
+# Scripts de arranque propios de cada web (el público genera robots.txt y sitemap.xml con su origen real)
+COPY apps/${APP}/docker-entrypoint.d/ /docker-entrypoint.d/
 # Valores por defecto (se sobrescriben al ejecutar): orígenes de la API para la política CSP
-ENV API_ORIGIN="" API_WS_ORIGIN=""
+ENV API_ORIGIN="" API_WS_ORIGIN="" PUBLIC_ORIGIN="" ROBOTS_TAG="noindex, nofollow"
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/healthz || exit 1

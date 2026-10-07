@@ -1,4 +1,6 @@
-import { Link, NavLink, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { applyJsonLd, applyMeta, metaFor, restaurantJsonLd } from './seo';
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import { MenuPage } from './pages/MenuPage';
@@ -10,6 +12,9 @@ import { InvoicePage } from './pages/InvoicePage';
 
 export function App() {
   const info = useQuery({ queryKey: ['info'], queryFn: () => api('') });
+  const { pathname } = useLocation();
+  useEffect(() => { applyMeta(metaFor(pathname, info.data?.restaurant?.name), `${window.location.origin}${pathname === '/' ? '/' : pathname}`); }, [pathname, info.data]);
+  useEffect(() => { applyJsonLd(restaurantJsonLd(info.data, window.location.origin)); }, [info.data]);
   const nav = ({ isActive }: { isActive: boolean }) => `rb-btn rb-btn--sm ${isActive ? '' : 'rb-btn--white'}`;
   return (
     <>

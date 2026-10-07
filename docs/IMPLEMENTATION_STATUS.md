@@ -30,7 +30,7 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Reportes (14), dashboards por rol, analítica | ✅ | consultas directas (sin tablas resumen); 🟡 optimizar con resúmenes/réplica a escala |
 | Impresión | ✅ | cola + formato 42/32 col. + **agente local ESC/POS** (`apps/print-agent`: CP858, corte, cajón, zumbador, red TCP 9100 o dispositivo, reintento con espera si la impresora está apagada); falta probar con hardware real |
 | Notificaciones | 🟡 | in-app + tiempo real + **correo** (cola durable `email_outbox` con reintentos 1/5/15/60/180 min, SMTP vía `SMTP_URL` o modo registro; factura con XML adjunto al receptor, alertas críticas a destinatarios configurables, correo de prueba). **Sin SMS/push** |
-| Público/QR | ✅ | pago en línea no integrado (pago al recibir) |
+| Público/QR | ✅ | pago en línea no integrado (pago al recibir). **SEO ligero** sin migrar a Next.js: título/descripción/canónica/OG por página, JSON-LD `Restaurant`, páginas privadas (factura, pedido, QR de mesa) con `noindex`, `robots.txt` + `sitemap.xml` generados al arrancar con el origen real, admin con `X-Robots-Tag: noindex`. Sigue siendo SPA: el HTML inicial es una cáscara que Google sí ejecuta, pero otros rastreadores y vistas previas sociales no verán el contenido dinámico (SSR/Next.js sigue pendiente) |
 | Pasarela de pagos (tarjeta en línea) | ⏳ | interfaz por definir; hoy se registra método y referencia |
 | Modo arcade, sonidos, PWA | ✅ | |
 | Observabilidad (logs JSON, requestId, métricas) | 🟡 | logs JSON con requestId + **`/metrics` Prometheus** (token, sin ids en etiquetas) + 8 reglas de alerta validadas con promtool y perfil `monitoring` en el compose; sin trazas distribuidas (OpenTelemetry) ni Sentry |
