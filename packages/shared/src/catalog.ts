@@ -16,7 +16,7 @@ export const TaxDto = z.object({
 });
 export const IngredientDto = z.object({
   sku: z.string().min(1).max(40), name: z.string().min(1).max(120), unit: z.enum(UNITS),
-  perishable: z.boolean().default(false), avgCost: money.default(0),
+  perishable: z.boolean().default(false), avgCost: money.optional(),   // opcional: omitirlo al editar NO reinicia el costo
   defaultMin: z.number().min(0).default(0), defaultMax: z.number().min(0).default(0),
 });
 export const ModifierGroupDto = z.object({
@@ -57,10 +57,11 @@ export const BranchProductDto = z.object({ price: money.nullable().optional(), i
 export const MovementDto = z.object({
   branchId: uuid, ingredientId: uuid,
   type: z.enum(['PURCHASE_IN', 'ADJUSTMENT', 'WASTE', 'RETURN']),
-  qty: z.number().refine((n) => n !== 0, 'qty no puede ser 0'),
+  qty: z.number().finite().min(-1_000_000).max(1_000_000).refine((n) => n !== 0, 'qty no puede ser 0'),
   unitCost: money.optional(), reason: z.string().max(200).optional(),
   lotCode: z.string().max(40).optional(), expiresOn: z.string().date().optional(),
 }).superRefine((m, c) => {
+  if ((m.type === 'PURCHASE_IN' || m.type === 'RETURN') && m.qty < 0) c.addIssue({ code: 'custom', message: 'Una entrada debe ser positiva', path: ['qty'] });
   if (m.type === 'WASTE' && m.qty > 0) c.addIssue({ code: 'custom', message: 'La merma debe ser negativa', path: ['qty'] });
   if (m.type === 'WASTE' && !m.reason) c.addIssue({ code: 'custom', message: 'La merma requiere motivo', path: ['reason'] });
   if (m.type === 'ADJUSTMENT' && !m.reason) c.addIssue({ code: 'custom', message: 'El ajuste requiere motivo', path: ['reason'] });

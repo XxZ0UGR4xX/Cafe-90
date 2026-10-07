@@ -65,10 +65,10 @@ export class CatalogService {
     return this.db.tx(async (q) => {
       const cols = `id, sku, name, unit, perishable, avg_cost AS "avgCost", default_min AS "defaultMin", default_max AS "defaultMax"`;
       const r = id
-        ? await q.query(`UPDATE ingredients SET sku=$2,name=$3,unit=$4,perishable=$5,avg_cost=$6,default_min=$7,default_max=$8 WHERE id=$1 AND deleted_at IS NULL RETURNING ${cols}`,
-            [id, d.sku, d.name, d.unit, d.perishable, d.avgCost, d.defaultMin, d.defaultMax])
+        ? await q.query(`UPDATE ingredients SET sku=$2,name=$3,unit=$4,perishable=$5,avg_cost=COALESCE($6,avg_cost),default_min=$7,default_max=$8 WHERE id=$1 AND deleted_at IS NULL RETURNING ${cols}`,
+            [id, d.sku, d.name, d.unit, d.perishable, d.avgCost ?? null, d.defaultMin, d.defaultMax])
         : await q.query(`INSERT INTO ingredients (tenant_id, sku, name, unit, perishable, avg_cost, default_min, default_max)
-                         VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7) RETURNING ${cols}`, [d.sku, d.name, d.unit, d.perishable, d.avgCost, d.defaultMin, d.defaultMax]);
+                         VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7) RETURNING ${cols}`, [d.sku, d.name, d.unit, d.perishable, d.avgCost ?? 0, d.defaultMin, d.defaultMax]);
       if (!r.rows[0]) throw notFound('ingredient');
       await this.audit.record(q, { action: id ? 'ingredient.update' : 'ingredient.create', entity: 'ingredient', entityId: r.rows[0].id, newValue: r.rows[0] });
       return r.rows[0];

@@ -74,6 +74,18 @@ export class SalesService {
     }
   }
 
+  /**
+   * Antes de cobrar: revalida promociones/cupones con tope de canjes. Se bloquean las promociones aplicadas (serializa cobros que
+   * compiten por el último canje) y se recalcula; devuelve true si el total cambió (el cobro NO se aplica: el cajero confirma el nuevo importe).
+   */
+  async revalidatePromotions(q: Tx, orderId: string): Promise<boolean> {
+    const before = Number((await q.query('SELECT total FROM orders WHERE id=$1', [orderId])).rows[0].total);
+    await q.query(`SELECT id FROM promotions WHERE id IN (SELECT promotion_id FROM order_discounts WHERE order_id=$1 AND kind='PROMO' AND promotion_id IS NOT NULL) ORDER BY id FOR UPDATE`, [orderId]);
+    await this.recalc(q, orderId);
+    const after = Number((await q.query('SELECT total FROM orders WHERE id=$1', [orderId])).rows[0].total);
+    return Math.abs(after - before) > 0.001;
+  }
+
   /** Recalcula totales de la orden desde sus items vigentes y descuentos. */
   async recalc(q: Tx, orderId: string) {
     await this.promotions.applyTo(q, orderId);   // promociones automáticas y cupones vigentes
@@ -259,6 +271,7 @@ export class SalesService {
     if (left === 0 && !['CANCELLED', 'COMPLETED'].includes(o.status)) {
       await q.query(`UPDATE orders SET cancelled_at=now(), cancelled_by=$2, cancel_reason='Todos los productos cancelados' WHERE id=$1`, [orderId, ctx().principal!.userId]);
       await this.setStatus(q, o, 'CANCELLED', { force: true });
+      await this.events.emit(q, { type: 'OrderCancelled', branchId: o.branch_id, payload: { orderId, number: o.number, refunded: false } });   // restituye los puntos canjeados
       await this.releaseTableIfDone(q, o);
     }
   }
@@ -391,7 +404,7 @@ export class SalesService {
       const o = await this.lockOrder(q, orderId);
       this.assertBranch('sales.discount.override', o.branch_id);
       if (o.payment_status === 'PAID') throw new AppError('ORDER_ALREADY_PAID', 409);
-      const r = await q.query('DELETE FROM order_discounts WHERE id=$1 AND order_id=$2 RETURNING kind, value, amount', [discountId, orderId]);
+      const r = await q.query(`DELETE FROM order_discounts WHERE id=$1 AND order_id=$2 AND kind IN ('PERCENT','FIXED') RETURNING kind, value, amount`, [discountId, orderId]);   // los canjes de puntos y promociones no se quitan a mano
       if (!r.rowCount) throw notFound('discount');
       await this.recalc(q, orderId);
       await this.audit.record(q, { action: 'order.discount_removed', entity: 'order', entityId: orderId, branchId: o.branch_id, oldValue: r.rows[0] });

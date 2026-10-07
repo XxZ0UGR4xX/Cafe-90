@@ -26,9 +26,10 @@ export class SupervisorService {
     const locked = u?.locked_until && new Date(u.locked_until) > new Date();
     const ok = !!u && !locked && u.status === 'ACTIVE' && !!u.pin_hash && (await verifySecret(u.pin_hash, sup.pin));
     if (!ok) {
-      if (u) await this.db.independent(async (q) => {
+      // Un intento fallido no prolonga un bloqueo vigente (si no, un atacante mantendría fuera al supervisor indefinidamente).
+      if (u && !locked) await this.db.independent(async (q) => {
         await q.query(`UPDATE users SET failed_attempts = failed_attempts + 1,
-          locked_until = CASE WHEN failed_attempts + 1 >= 5 THEN now() + interval '15 minutes' ELSE locked_until END WHERE id = $1`, [u.id]);
+          locked_until = CASE WHEN failed_attempts + 1 >= 5 THEN now() + interval '15 minutes' ELSE locked_until END WHERE id = $1 AND (locked_until IS NULL OR locked_until <= now())`, [u.id]);
       });
       throw new AppError('SUPERVISOR_REQUIRED', 403, { reason: 'pin_invalid' });
     }

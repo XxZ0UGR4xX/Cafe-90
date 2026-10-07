@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { createLogger, PinoNestLogger } from './common/logger';
 import { requestContext } from './common/request-context';
 import { loadEnv } from './config/env';
+import { verifyAccess } from './modules/identity/tokens';
 import { MetricsService } from './modules/metrics/metrics.service';
 import { REDIS, type RedisClient } from './infra/redis.module';
 
@@ -21,7 +22,7 @@ export async function createApp(): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({
     loggerInstance: logger,
     genReqId: (req: { headers: Record<string, unknown> }) => (req.headers['x-request-id'] as string) || randomUUID(),
-    trustProxy: true,
+    trustProxy: env.TRUST_PROXY as boolean,   // también admite número de saltos o lista CIDR
     disableRequestLogging: true,
     bodyLimit: 1_048_576,
   });
@@ -57,8 +58,15 @@ export async function createApp(): Promise<NestFastifyApplication> {
   const redis = app.get<RedisClient>(REDIS);
   await app.register(fastifyRateLimit as any, {
     timeWindow: '1 minute',
-    // Sesiones autenticadas: un cubo por token (el restaurante entero comparte una IP pública: limitar por IP bloquearía las tablets entre sí).
-    keyGenerator: (req: { ip: string; headers: Record<string, unknown> }) => { const a = String(req.headers.authorization ?? ''); return a.startsWith('Bearer ') ? `t:${createHash('sha256').update(a).digest('hex').slice(0, 24)}` : `ip:${req.ip}`; },
+    // Sesiones autenticadas: un cubo por SESIÓN (la firma del JWT se verifica: un Bearer inventado cae en el cubo de su IP).
+    // El restaurante entero comparte una IP pública: limitar por IP bloquearía las tablets entre sí.
+    keyGenerator: async (req: { ip: string; headers: Record<string, unknown> }) => {
+      const a = String(req.headers.authorization ?? '');
+      if (a.startsWith('Bearer ')) {
+        try { const c = await verifyAccess(a.slice(7), env.JWT_ACCESS_SECRET); return `t:${c.tid}:${c.sid}`; } catch { /* token inválido → por IP */ }
+      }
+      return `ip:${req.ip}`;
+    },
     max: (_req: unknown, key: string) => (key.startsWith('t:') ? env.RATE_LIMIT_AUTH_MAX : env.RATE_LIMIT_MAX),
     ...(redis ? { redis, nameSpace: 'rl:global:', skipOnError: true } : {}) });
 

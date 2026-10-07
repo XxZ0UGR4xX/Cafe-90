@@ -20,6 +20,9 @@ export class UsersService {
   async get(id: string) {
     const u = await this.db.tx((q) => this.repo.get(q, id));
     if (!u) throw notFound('user');
+    const scope = ctx().principal!.branchScope('identity.user.read');
+    // mismo alcance que el listado: un usuario fuera de tus sucursales no existe para ti (salvo tú mismo)
+    if (scope && u.id !== ctx().principal!.userId && !u.roles.some((r) => r.branchId && scope.includes(r.branchId))) throw notFound('user');
     return u;
   }
 
@@ -33,14 +36,18 @@ export class UsersService {
       if (role.key === 'SUPER_ADMIN' && !actor.grants.some((g) => g.roleKey === 'SUPER_ADMIN'))
         throw forbidden({ reason: 'solo SUPER_ADMIN asigna SUPER_ADMIN' });
       const perms = await this.repo.rolePermissions(q, role.id);
-      const missing = perms.filter((p) => !actor.can(p));
-      if (missing.length) throw forbidden({ reason: 'escalada de privilegios', missing: missing.slice(0, 5) });
-      if (it.branchIds === null) {
-        if (!actor.isCorporate) throw forbidden({ reason: 'alcance corporativo requiere rol corporativo' });
-        out.push({ roleId: role.id, branchId: null });
-      } else {
-        for (const b of it.branchIds) {
+      // Los permisos del rol se exigen en CADA sucursal destino (o en todo el tenant para alcance corporativo): tener el permiso en otra sucursal no basta.
+      const targets: (string | null)[] = it.branchIds === null ? [null] : it.branchIds;
+      for (const b of targets) {
+        if (b === null) {
+          if (actor.branchScope('identity.user.write') !== null) throw forbidden({ reason: 'alcance corporativo requiere permiso corporativo de usuarios' });
+          const missing = perms.filter((p) => actor.branchScope(p) !== null);
+          if (missing.length) throw forbidden({ reason: 'escalada de privilegios', missing: missing.slice(0, 5) });
+          out.push({ roleId: role.id, branchId: null });
+        } else {
           if (!actor.can('identity.user.write', b)) throw forbidden({ reason: 'sucursal fuera de alcance', branchId: b });
+          const missing = perms.filter((p) => !actor.can(p, b));
+          if (missing.length) throw forbidden({ reason: 'escalada de privilegios', missing: missing.slice(0, 5) });
           out.push({ roleId: role.id, branchId: b });
         }
       }
@@ -64,7 +71,7 @@ export class UsersService {
       if (r.branchId === null && !actor.isCorporate) throw forbidden({ reason: 'el usuario tiene alcance corporativo' });
       const role = await this.repo.roleByKey(q, r.role);
       if (!role) continue;
-      const missing = (await this.repo.rolePermissions(q, role.id)).filter((p) => !actor.can(p, r.branchId ?? undefined));
+      const missing = (await this.repo.rolePermissions(q, role.id)).filter((p) => (r.branchId === null ? actor.branchScope(p) !== null : !actor.can(p, r.branchId)));
       if (missing.length) throw forbidden({ reason: 'el usuario tiene más privilegios que tú o está fuera de tu alcance', missing: missing.slice(0, 3) });
     }
     return target;

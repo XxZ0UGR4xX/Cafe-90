@@ -4,6 +4,7 @@ import { AppError, forbidden, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
 import { DomainEvents } from '../../common/domain-events';
 import { AuditService } from '../audit/audit.service';
+import { SupervisorService, type SupervisorInput } from '../identity/supervisor.service';
 import { SalesService } from '../sales/sales.service';
 
 type Dict = Record<string, any>;
@@ -17,7 +18,7 @@ const NEXT: Record<string, string[]> = {
 
 @Injectable()
 export class DeliveryService {
-  constructor(private readonly db: DbService, private readonly sales: SalesService, private readonly audit: AuditService, private readonly events: DomainEvents) {}
+  constructor(private readonly db: DbService, private readonly sales: SalesService, private readonly audit: AuditService, private readonly events: DomainEvents, private readonly supervisor: SupervisorService) {}
 
   register() {
     // El avance de cocina mueve el estado del delivery (sin acoplar módulos).
@@ -61,7 +62,12 @@ export class DeliveryService {
     r.history = (await q.query('SELECT status, at FROM delivery_status_history WHERE delivery_id=$1 ORDER BY at', [id])).rows;
     return r;
   }
-  get(id: string) { return this.db.tx((q) => this.byId(q, id)); }
+  async get(id: string) {
+    const r = await this.db.tx((q) => this.byId(q, id));
+    const p = ctx().principal!;
+    if (!p.can('delivery.order.read', r.branchId)) throw forbidden();   // el guard solo ve el id de la ruta: se valida la sucursal del pedido
+    return r;
+  }
 
   list(f: { branchId: string; status?: string; mine?: boolean }) {
     const p = ctx().principal!;
@@ -88,7 +94,7 @@ export class DeliveryService {
     });
   }
 
-  setStatus(id: string, to: string, reason?: string) {
+  setStatus(id: string, to: string, reason?: string, supervisor?: SupervisorInput) {
     return this.db.tx(async (q) => {
       const d = (await q.query('SELECT * FROM delivery_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!d) throw notFound('delivery');
@@ -102,7 +108,10 @@ export class DeliveryService {
         if (!reason) throw new AppError('VALIDATION_ERROR', 400, { field: 'reason' });
         const o = await this.sales.lockOrder(q, d.order_id);
         if (o.paid_total > 0) throw new AppError('CONFLICT', 409, undefined, false, '⚠️ El pedido ya tiene pagos: realiza una devolución.');
-        if (!['CANCELLED', 'COMPLETED'].includes(o.status)) await this.sales.voidOrder(q, o, reason, p.userId);
+        // Igual que cancelar una cuenta: con productos ya enviados a cocina se exige permiso de cancelación o PIN de supervisor
+        const sent = (await q.query(`SELECT count(*)::int n FROM order_items WHERE order_id=$1 AND status NOT IN ('PENDING','CANCELLED')`, [d.order_id])).rows[0].n;
+        const authBy = sent > 0 ? await this.supervisor.authorize('sales.order.cancel', d.branch_id, supervisor) : p.userId;
+        if (!['CANCELLED', 'COMPLETED'].includes(o.status)) await this.sales.voidOrder(q, o, reason, authBy);
       }
       if (to === 'DELIVERED') {
         const o = await this.sales.lockOrder(q, d.order_id);

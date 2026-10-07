@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, post, refreshSession, setToken } from './api';
+import { clearCache } from '../offline/store';
 
 export interface Me {
   id: string; email: string; fullName: string; isCorporate: boolean;
@@ -43,7 +44,7 @@ export const useSession = create<SessionState>((set, get) => ({
     const r = await api('/auth/pin-login', { method: 'POST', body: { tenant, userCode, pin }, noAuth: true }); setToken(r.accessToken);
     set({ me: await api<Me>('/auth/me'), status: 'ready' });
   },
-  async logout() { try { await api('/auth/logout', { method: 'POST', body: {}, headers: { 'x-requested-with': 'retroburger' } }); } catch { /* ya sin sesión */ } get().reset(); },
+  async logout() { try { await api('/auth/logout', { method: 'POST', body: {}, headers: { 'x-requested-with': 'retroburger' } }); } catch { /* ya sin sesión */ } void clearCache(); get().reset(); },
   reset() { setToken(null); set({ me: null, status: 'anon' }); },
   can(perm, branchId) {
     const s = get().me?.permissions[perm]; if (!s) return false;

@@ -1,4 +1,4 @@
-import { createStore, del, entries, get, set, delMany } from 'idb-keyval';
+import { clear, createStore, del, entries, get, set, delMany } from 'idb-keyval';
 
 /** Almacenamiento local: caché de lectura + cola de operaciones (outbox) persistente. */
 const cacheStore = () => createStore('rb-cache', 'kv');
@@ -10,7 +10,7 @@ export async function cacheSet(key: string, value: unknown) { try { await set(ke
 export async function cacheGet<T>(key: string): Promise<{ value: T; at: number } | undefined> { try { return await get(key, C()); } catch { return undefined; } }
 
 export type OpType = 'ORDER_CREATE' | 'ORDER_PAY' | 'ORDER_CANCEL' | 'ORDER_ADD_ITEMS';
-export interface OutboxOp { opId: string; type: OpType; branchId: string; createdAt: string; payload: Record<string, unknown>; attempts: number; label?: string }
+export interface OutboxOp { opId: string; type: OpType; branchId: string; createdAt: string; payload: Record<string, unknown>; attempts: number; label?: string; userId?: string }
 
 let seq = 0;
 const keyOf = (createdAt: string, opId: string) => `${createdAt}|${String(++seq).padStart(6, '0')}|${opId}`;
@@ -24,4 +24,5 @@ export async function listOps(): Promise<{ key: string; op: OutboxOp }[]> {
 }
 export async function removeOps(keys: string[]) { if (keys.length) await delMany(keys, O()); }
 export async function bumpAttempts(key: string, op: OutboxOp) { await set(key, { ...op, attempts: op.attempts + 1 }, O()); }
-export async function clearAll() { await del('x', C()); }
+/** Borra la caché de lectura (menú, etc.). La cola de operaciones NO se toca: son ventas aún sin sincronizar. */
+export async function clearCache() { try { await clear(C()); } catch { /* sin IndexedDB */ } }

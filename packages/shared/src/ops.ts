@@ -48,13 +48,22 @@ export const DeliveryCreateDto = z.object({
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'QR', 'PAID']).default('CASH'), notes: z.string().max(300).optional(),
   items: z.array(OrderItemInputDto).min(1).max(100), clientUuid: uuid.optional(),
 });
-export const DeliveryStatusDto = z.object({ to: z.enum(DELIVERY_STATUSES), reason: z.string().max(200).optional() });
+export const DeliveryStatusDto = z.object({ to: z.enum(DELIVERY_STATUSES), reason: z.string().max(200).optional(), supervisor: z.object({ userCode: z.string().min(1).max(40), pin: z.string().regex(/^\d{4,6}$/) }).optional() });
 export const DeliveryAssignDto = z.object({ driverId: uuid });
 
 // ─────── Impresión ───────
+/** Conexión de la impresora. Solo red (IP/host:puerto) o dispositivo local (/dev/...): nunca rutas de archivo arbitrarias. */
+const printerFlags = {
+  codepage: z.number().int().min(0).max(255).optional(), feed: z.number().int().min(0).max(10).optional(),
+  cut: z.boolean().optional(), tallKitchen: z.boolean().optional(), beep: z.boolean().optional(), openDrawer: z.boolean().optional(),
+};
+export const PrinterConnectionDto = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('network'), host: z.string().min(1).max(253).regex(/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/, 'host inválido'), port: z.number().int().min(1).max(65535).default(9100), ...printerFlags }),
+  z.object({ type: z.enum(['usb', 'file']), path: z.string().regex(/^\/dev\/(usb\/lp\d{1,2}|lp\d{1,2}|ttyUSB\d{1,2}|ttyACM\d{1,2})$/, 'dispositivo no permitido'), ...printerFlags }),
+]);
 export const PrinterDto = z.object({
   branchId: uuid, name: z.string().min(1).max(60), role: z.enum(['KITCHEN', 'CASH', 'BAR']),
-  connection: z.record(z.unknown()).default({}), columns: z.number().int().min(24).max(80).default(42),
+  connection: PrinterConnectionDto.optional(), columns: z.number().int().min(24).max(80).default(42),
   stationKeys: z.array(z.string().max(30)).default([]), isActive: z.boolean().default(true),
 });
 

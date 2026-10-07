@@ -39,7 +39,7 @@ export class AuditController {
       if (q.entityId) add('entity_id = ?', q.entityId);
       if (q.action) add('action = ?', q.action);
       if (q.branchId) add('branch_id = ?', q.branchId);
-      if (scope) add('(branch_id = ANY(?::uuid[]) OR branch_id IS NULL)', scope);
+      if (scope) add('branch_id = ANY(?::uuid[])', scope);   // los eventos globales (sin sucursal: usuarios, roles, configuración) solo los ve el alcance corporativo
       p.push(q.limit + 1);
       return (await tx.query(
         `SELECT id, branch_id, user_id, user_name, host(ip) AS ip, action, entity, entity_id, old_value, new_value,

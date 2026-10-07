@@ -100,7 +100,9 @@ export class CashService {
       if (shift.user_id !== uid && !ctx().principal!.can('cash.shift.approve', shift.branch_id)) throw forbidden({ reason: 'turno ajeno' });
       const limit = Number(await this.settings.get('cash.expenseLimit', shift.branch_id, DEFAULT_EXPENSE_LIMIT));
       let authorizedBy: string | null = null;
-      if (d.type === 'WITHDRAWAL' || (d.type === 'EXPENSE' && d.amount > limit) || d.type === 'DEPOSIT' && d.amount > limit * 10)
+      // El límite de gasto es ACUMULADO por turno (varios gastos pequeños no lo evaden) y todo depósito exige supervisor (infla el efectivo esperado).
+      const spent = d.type === 'EXPENSE' ? -Number((await q.query(`SELECT COALESCE(sum(amount),0) AS s FROM cash_movements WHERE shift_id=$1 AND type='EXPENSE'`, [shift.id])).rows[0].s) : 0;
+      if (d.type === 'WITHDRAWAL' || d.type === 'DEPOSIT' || (d.type === 'EXPENSE' && (d.amount > limit || spent + d.amount > limit)))
         authorizedBy = await this.supervisor.authorize('cash.shift.approve', shift.branch_id, d.supervisor);
       const expected = await this.expectedCash(q, shift.id);
       if (d.type !== 'DEPOSIT' && d.amount > expected) throw new AppError('VALIDATION_ERROR', 400, { field: 'amount', message: 'El monto excede el efectivo en caja' });
@@ -183,9 +185,17 @@ export class CashService {
       const difference = r2(d.countedCash - summary.expectedCash);
       const tolerance = Number(await this.settings.get('cash.tolerance', s.branch_id, DEFAULT_TOLERANCE));
       let approvedBy: string | null = null;
-      if (Math.abs(difference) > tolerance) {
-        if (!d.notes) throw new AppError('VALIDATION_ERROR', 400, { field: 'notes', message: 'La diferencia excede la tolerancia: agrega un comentario' });
-        approvedBy = await this.supervisor.authorize('cash.shift.approve', s.branch_id, d.supervisor);
+      // Conteo ciego sin oráculo: cada cierre rechazado queda registrado y, tras 3, el turno solo cierra con supervisor
+      // (no se puede «barrer» el importe contado hasta que el sistema lo acepte y así deducir el esperado).
+      const rejected = Number((await q.query(`SELECT count(*)::int n FROM audit_logs WHERE action='cash_shift.close_rejected' AND entity_id=$1`, [id])).rows[0].n);
+      const reject = async (e: unknown): Promise<never> => {
+        await this.db.independent(async (iq) => { await this.audit.record(iq, { action: 'cash_shift.close_rejected', entity: 'cash_shift', entityId: id, branchId: s.branch_id }); });
+        throw e;
+      };
+      if (Math.abs(difference) > tolerance || rejected >= 3) {
+        if (!d.notes) await reject(new AppError('VALIDATION_ERROR', 400, { field: 'notes', message: 'La diferencia excede la tolerancia: agrega un comentario' }));
+        try { approvedBy = await this.supervisor.authorize('cash.shift.approve', s.branch_id, d.supervisor); }
+        catch (e) { await reject(e); }
       }
       const openOrders = (await q.query(
         `SELECT count(*)::int AS n FROM orders WHERE branch_id=$1 AND created_by=$2 AND payment_status IN ('PENDING','PARTIAL') AND status NOT IN ('CANCELLED','COMPLETED','DRAFT')`, [s.branch_id, s.user_id])).rows[0].n;

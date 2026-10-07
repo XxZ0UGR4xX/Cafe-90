@@ -22,7 +22,7 @@ class DeliveryController {
   @Get(':id') @Require('delivery.order.read') get(@Param('id', id) i: string) { return this.svc.get(i); }
   @Post() @Require('delivery.order.write') create(@Body() b: CreateBody) { return this.svc.create(b); }
   @Post(':id/assign') @Require('delivery.order.write') assign(@Param('id', id) i: string, @Body() b: AssignBody) { return this.svc.assign(i, b.driverId); }
-  @Post(':id/status') @Authenticated() status(@Param('id', id) i: string, @Body() b: StatusBody) { return this.svc.setStatus(i, b.to, b.reason); }
+  @Post(':id/status') @Authenticated() status(@Param('id', id) i: string, @Body() b: StatusBody) { return this.svc.setStatus(i, b.to, b.reason, b.supervisor); }
 }
 
 @Global()

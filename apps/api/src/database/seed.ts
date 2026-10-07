@@ -15,6 +15,9 @@ const STAFF_PASSWORD = process.env.SEED_STAFF_PASSWORD ?? 'Retro90!Staff';
 const STAFF_PIN = process.env.SEED_STAFF_PIN ?? '1990';
 
 export async function seedDemo(log: (m: string) => void = console.log) {
+  // Crea un tenant con credenciales CONOCIDAS: jamás en producción (salvo autorización explícita y consciente).
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true')
+    throw new Error('El seed de demostración crea usuarios con contraseñas conocidas: no se ejecuta con NODE_ENV=production.');
   const app = await createApp();
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

@@ -19,7 +19,15 @@ const schema = z.object({
   RATE_LIMIT_AUTH_MAX: z.coerce.number().default(1200),
   JOBS_ENABLED: z.enum(['true', 'false']).default('true'),
   PUBLIC_RATE_LIMIT_MAX: z.coerce.number().default(30),
+  /** Consultas públicas sensibles por IP/minuto (puntos de lealtad, búsqueda y descarga de facturas). */
+  PUBLIC_SENSITIVE_RATE_LIMIT_MAX: z.coerce.number().default(10),
+  /** Lecturas públicas (menú, estado de pedido, mesa QR) por IP/minuto. */
+  PUBLIC_READ_RATE_LIMIT_MAX: z.coerce.number().default(300),
+  /** Proxies de confianza para X-Forwarded-For: lista de IP/CIDR o palabras clave (loopback, linklocal, uniquelocal). Por defecto, redes privadas (Caddy/nginx en la red de Docker). `false` = IP del socket. */
+  TRUST_PROXY: z.string().default('loopback,linklocal,uniquelocal').transform((v) => (v === 'false' ? false : v === 'true' ? true : v)),
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().default(10),
+  /** Intentos de login (cualquier cuenta) por IP+tenant y minuto. */
+  LOGIN_IP_RATE_LIMIT_MAX: z.coerce.number().default(40),
   /** Clave para cifrar secretos TOTP en reposo. Obligatoria en producción. */
   MFA_ENCRYPTION_KEY: z.string().min(32, 'MFA_ENCRYPTION_KEY debe tener al menos 32 caracteres').optional(),
   /** Si es 'true', SUPER_ADMIN/ADMIN deben enrolar 2FA para poder iniciar sesión. */
@@ -39,6 +47,12 @@ const schema = z.object({
 }).superRefine((v, ctx) => {
   if (v.NODE_ENV === 'production' && !v.MFA_ENCRYPTION_KEY)
     ctx.addIssue({ code: 'custom', path: ['MFA_ENCRYPTION_KEY'], message: 'es obligatoria en producción' });
+  if (v.NODE_ENV === 'production' && v.COOKIE_SECURE !== 'true')
+    ctx.addIssue({ code: 'custom', path: ['COOKIE_SECURE'], message: 'debe ser true en producción (la cookie de sesión solo viaja por HTTPS)' });
+  if (v.NODE_ENV === 'production' && v.CORS_ORIGINS.split(',').some((o) => /localhost|127\.0\.0\.1/.test(o)))
+    ctx.addIssue({ code: 'custom', path: ['CORS_ORIGINS'], message: 'no puede apuntar a localhost en producción' });
+  if (v.NODE_ENV === 'production' && /^(.)\1+$/.test(v.JWT_ACCESS_SECRET))
+    ctx.addIssue({ code: 'custom', path: ['JWT_ACCESS_SECRET'], message: 'secreto trivial' });
   if (v.NODE_ENV === 'production' && v.FISCAL_PROVIDER === 'sandbox')
     ctx.addIssue({ code: 'custom', path: ['FISCAL_PROVIDER'], message: "'sandbox' emite comprobantes SIN validez fiscal: no se permite en producción" });
 });

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ENV, type Env } from '../../config/env';
 import { DbService, Tx } from '../../database/db.service';
 import { AppError, notFound } from '../../common/errors';
+import { MemoryRateLimiter } from '../../common/rate-limiter';
 import { ctx } from '../../common/request-context';
 import { hashSecret } from '../identity/passwords';
 import { randomBytes } from 'node:crypto';
@@ -62,7 +63,9 @@ export class PublicService {
   private async customerByPhone(q: Tx, name: string, phone: string, email?: string) {
     const ex = (await q.query('SELECT id FROM customers WHERE phone=$1 AND deleted_at IS NULL', [phone])).rows[0];
     if (ex) return ex.id as string;
-    return (await q.query(`INSERT INTO customers (tenant_id, name, phone, email) VALUES (app_tenant_id(),$1,$2,$3) RETURNING id`, [name, phone, email ?? null])).rows[0].id as string;
+    // El correo solo se guarda si nadie lo tiene: ni confirma que ya existe (409) ni permite «apropiarse» del correo de otra persona.
+    const taken = email ? (await q.query('SELECT 1 FROM customers WHERE lower(email)=lower($1) AND deleted_at IS NULL', [email])).rowCount : 0;
+    return (await q.query(`INSERT INTO customers (tenant_id, name, phone, email) VALUES (app_tenant_id(),$1,$2,$3) RETURNING id`, [name, phone, taken ? null : email ?? null])).rows[0].id as string;
   }
 
   /** Pedido en línea: para recoger o a domicilio. Queda PENDIENTE hasta que el restaurante lo confirme. */
@@ -123,8 +126,11 @@ export class PublicService {
     const t = await this.db.tx((q) => this.tableByToken(q, token));
     return { table: { number: t.number, branch: t.branch, branchId: t.branchId }, menu: await this.menu(t.branchId) };
   }
+  /** Tope por MESA (además del de IP): una foto del QR no permite inundar la cocina desde cualquier lugar. */
+  private readonly qrLimiter = new MemoryRateLimiter(6, 10 * 60_000);
   async qrOrder(token: string, d: Dict) {
     const t = await this.db.tx((q) => this.tableByToken(q, token));
+    if (await this.qrLimiter.hit(`qr:${t.id}`)) throw new AppError('RATE_LIMITED', 429, undefined, true, '📱 Esta mesa ya envió varios pedidos. Pide ayuda a tu mesero.');
     return this.db.tx(async (q) => {
       const auto = (await this.settings.get('qr.autoSend', t.branchId, false)) === true;
       const o = await this.sales.create({ branchId: t.branchId, channel: 'QR', tableId: t.id, customerName: d.customerName, notes: d.notes, items: d.items, send: auto, source: 'QR', guests: 1 });
@@ -146,7 +152,7 @@ export class PublicService {
   async qrBill(token: string) {
     const t = await this.db.tx((q) => this.tableByToken(q, token));
     return this.db.tx(async (q) => {
-      const orders = (await q.query(`SELECT o.id, o.number, o.status, o.total, o.paid_total AS "paidTotal" FROM orders o JOIN table_sessions s ON s.id = o.table_session_id AND s.status='OPEN' WHERE s.table_id=$1 AND o.status <> 'CANCELLED'`, [t.id])).rows;
+      const orders = (await q.query(`SELECT o.number, o.status, o.total, o.paid_total AS "paidTotal" FROM orders o JOIN table_sessions s ON s.id = o.table_session_id AND s.status='OPEN' WHERE s.table_id=$1 AND o.status <> 'CANCELLED'`, [t.id])).rows;
       return { table: t.number, orders, total: orders.reduce((a, o) => a + o.total, 0), paid: orders.reduce((a, o) => a + o.paidTotal, 0) };
     });
   }

@@ -41,6 +41,12 @@ export class ReservationsService {
     if (source === 'STAFF') this.assertBranch('floor.reservation.write', d.branchId);
     return this.db.tx(async (q) => {
       if (new Date(d.startsAt) < new Date(Date.now() - 5 * 60_000)) throw new AppError('VALIDATION_ERROR', 400, { field: 'startsAt', message: 'La fecha ya pasó' });
+      if (source === 'PUBLIC') {   // anónimo: horizonte acotado, duración máxima y tope de solicitudes sin confirmar por teléfono
+        if (new Date(d.startsAt).getTime() > Date.now() + 60 * 86_400_000) throw new AppError('VALIDATION_ERROR', 400, { field: 'startsAt', message: 'Solo se reserva con hasta 60 días de anticipación' });
+        if ((d.durationMin ?? 90) > 180) throw new AppError('VALIDATION_ERROR', 400, { field: 'durationMin', message: 'Para reservas largas contáctanos directamente' });
+        const open = (await q.query(`SELECT count(*)::int n FROM reservations WHERE source='PUBLIC' AND status='PENDING' AND phone=$1 AND starts_at > now()`, [d.phone])).rows[0].n;
+        if (open >= 3) throw new AppError('CONFLICT', 409, undefined, false, '📅 Ya tienes varias reservaciones por confirmar. Espera nuestra confirmación o llámanos.');
+      }
       let tableId: string | null = d.tableId ?? null;
       if (tableId) {
         const t = (await q.query('SELECT capacity, branch_id FROM tables WHERE id=$1 AND is_active', [tableId])).rows[0];
@@ -77,6 +83,11 @@ export class ReservationsService {
       if (!cur) throw notFound('reservation');
       this.assertBranch('floor.reservation.write', cur.branch_id);
       if (!['PENDING', 'CONFIRMED'].includes(cur.status)) throw new AppError('CONFLICT', 409);
+      if (d.tableId) {   // la mesa nueva debe ser de la misma sucursal, estar activa y tener capacidad
+        const t = (await q.query('SELECT branch_id, capacity FROM tables WHERE id=$1 AND is_active', [d.tableId])).rows[0];
+        if (!t || t.branch_id !== cur.branch_id) throw notFound('table');
+        if (t.capacity < (d.partySize ?? cur.party_size)) throw new AppError('VALIDATION_ERROR', 400, { field: 'tableId', message: 'La mesa no tiene capacidad suficiente' });
+      }
       await q.query(`UPDATE reservations SET customer_id=COALESCE($2,customer_id), customer_name=COALESCE($3,customer_name), phone=COALESCE($4,phone), party_size=COALESCE($5,party_size),
         starts_at=COALESCE($6,starts_at), duration_min=COALESCE($7,duration_min), table_id=COALESCE($8,table_id), notes=COALESCE($9,notes) WHERE id=$1`,
         [id, d.customerId ?? null, d.customerName ?? null, d.phone ?? null, d.partySize ?? null, d.startsAt ?? null, d.durationMin ?? null, d.tableId ?? null, d.notes ?? null]);

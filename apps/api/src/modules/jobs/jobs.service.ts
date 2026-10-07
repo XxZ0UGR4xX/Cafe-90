@@ -61,6 +61,8 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
     for (const r of (await q.query(`SELECT r.id, r.branch_id, r.customer_name, r.party_size, r.starts_at, t.number AS tnum FROM reservations r LEFT JOIN tables t ON t.id = r.table_id
         WHERE r.status IN ('PENDING','CONFIRMED') AND r.starts_at BETWEEN now() AND now() + interval '30 minutes'`)).rows)
       await emit(q, { type: 'RESERVATION_SOON', severity: 'INFO', branchId: r.branch_id, title: `📅 Reservación próxima: ${r.customer_name} (${r.party_size})`, body: r.tnum ? `Mesa ${r.tnum}` : undefined, dedupeKey: `res:${r.id}` });
+    // Solicitudes públicas de reservación sin confirmar por el restaurante en 24 h: se liberan (no bloquean la mesa indefinidamente)
+    await q.query(`UPDATE reservations SET status='CANCELLED' WHERE source='PUBLIC' AND status='PENDING' AND created_at < now() - interval '24 hours'`);
     for (const s of (await q.query(`SELECT id, branch_id, opened_at FROM cash_shifts WHERE status='OPEN' AND opened_at < now() - interval '14 hours'`)).rows)
       await emit(q, { type: 'SHIFT_PENDING', severity: 'WARNING', branchId: s.branch_id, title: '💰 Corte de caja pendiente', body: 'Hay un turno abierto por más de 14 horas.', dedupeKey: `shift-open:${s.id}:${new Date().toISOString().slice(0, 10)}` });
     for (const k of (await q.query(`SELECT ko.id, ko.branch_id, o.number, ko.station_key FROM kitchen_orders ko JOIN orders o ON o.id = ko.order_id WHERE ko.status IN ('NEW','PREPARING') AND ko.created_at < now() - interval '10 minutes'`)).rows)

@@ -37,6 +37,9 @@ describe('autenticación', () => {
     const r = await api.req('POST', '/auth/login', { body: { tenant: t.slug, email: t.adminEmail, password: PASSWORD } });
     expect(r.status).toBe(423);
     expect(r.body.code).toBe('ACCOUNT_LOCKED');
+    // con credencial errónea la cuenta bloqueada responde igual que una inexistente (no enumera ni se prolonga)
+    const wrong = await api.req('POST', '/auth/login', { body: { tenant: t.slug, email: t.adminEmail, password: 'otra-mala-123' } });
+    expect(wrong.status).toBe(401); expect(wrong.body.code).toBe('INVALID_CREDENTIALS');
   });
 
   it('refresh rota el token y detecta reuso revocando la familia', async () => {

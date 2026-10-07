@@ -35,7 +35,7 @@ export class AccessGuard implements CanActivate {
     try { claims = await verifyAccess(header.slice(7), this.env.JWT_ACCESS_SECRET); }
     catch { throw unauthenticated(); }
 
-    const principal = await this.principals.load(claims.sub, claims.tid);
+    const principal = await this.principals.load(claims.sub, claims.tid, claims.sid);
     if (!principal) throw unauthenticated();
     const store = ctx();
     store.tenantId = claims.tid;
@@ -46,19 +46,21 @@ export class AccessGuard implements CanActivate {
     const required = this.reflector.getAllAndOverride<Permission[]>(REQUIRE_KEY, targets);
     if (!required?.length) throw forbidden({ reason: 'endpoint sin permiso declarado' });
 
-    const branchId = this.branchOf(req);
-    for (const p of required) if (!principal.can(p, branchId)) throw forbidden({ permission: p });
+    // TODOS los branchId presentes (ruta, query, cabecera, cuerpo) deben estar permitidos: no se puede validar uno y operar sobre otro.
+    const branches = this.branchesOf(req);
+    for (const p of required) {
+      if (!branches.length) { if (!principal.can(p, undefined)) throw forbidden({ permission: p }); continue; }
+      for (const b of branches) if (!principal.can(p, b)) throw forbidden({ permission: p });
+    }
     return true;
   }
 
-  private branchOf(req: FastifyRequest): string | undefined {
+  private branchesOf(req: FastifyRequest): string[] {
     const candidates = [
       (req.params as any)?.branchId, (req.query as any)?.branchId,
       req.headers['x-branch-id'], (req.body as any)?.branchId,
-    ];
-    const v = candidates.find((x) => typeof x === 'string' && x);
-    if (v === undefined) return undefined;
-    if (!UUID.test(v)) throw forbidden({ reason: 'branchId inválido' });
-    return v;
+    ].filter((x) => typeof x === 'string' && x) as string[];
+    for (const v of candidates) if (!UUID.test(v)) throw forbidden({ reason: 'branchId inválido' });
+    return [...new Set(candidates.map((c) => c.toLowerCase()))];
   }
 }

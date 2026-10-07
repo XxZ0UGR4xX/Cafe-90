@@ -103,7 +103,10 @@ export class InventoryEngine {
   }
 
   /** Costo promedio ponderado global por ingrediente. */
-  private async updateAvgCost(q: Tx, ingredientId: string, _branchQty: number, avg: number, qtyIn: number, costIn: number, supplierId?: string) {
+  private async updateAvgCost(q: Tx, ingredientId: string, _branchQty: number, _avg: number, qtyIn: number, costIn: number, supplierId?: string) {
+    if (!(qtyIn > 0)) return;   // solo las entradas positivas ponderan el costo
+    // El costo es GLOBAL por insumo: se bloquea la fila para que dos recepciones simultáneas (otras sucursales) no se pisen
+    const avg = Number((await q.query('SELECT avg_cost FROM ingredients WHERE id = $1 FOR UPDATE', [ingredientId])).rows[0].avg_cost);
     const total = (await q.query('SELECT COALESCE(sum(GREATEST(qty,0)),0) AS t FROM inventory WHERE ingredient_id = $1', [ingredientId])).rows[0].t as number;
     const before = Math.max(total - qtyIn, 0);  // la suma ya incluye este ingreso
     const newAvg = before + qtyIn > 0 ? (before * avg + qtyIn * costIn) / (before + qtyIn) : costIn;

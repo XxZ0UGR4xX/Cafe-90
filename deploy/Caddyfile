@@ -1,10 +1,12 @@
 # Los nombres salen de variables de entorno (docker-compose.prod.yml). Caddy obtiene y renueva los certificados solo.
 {$ADMIN_HOST} {
 	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	reverse_proxy web-admin:80
 }
 {$PUBLIC_HOST} {
 	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	reverse_proxy web-public:80
 }
 {$API_HOST} {

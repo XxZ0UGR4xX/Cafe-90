@@ -42,6 +42,8 @@ export class PaymentsService {
       const unsent = (await q.query(`SELECT 1 FROM order_items WHERE order_id=$1 AND status='PENDING'`, [orderId])).rowCount;
       if (unsent) await this.sales.sendToKitchen(orderId, q, { allowNegative: !!d.offline });
 
+      if (await this.sales.revalidatePromotions(q, orderId))   // una promoción/cupón dejó de aplicar: se guarda el total nuevo y NO se cobra
+        return { ...(await this.sales.get(orderId, q)), priceChanged: true, message: '🎟️ Una promoción o cupón ya no está disponible: el total cambió. Revisa la cuenta antes de cobrar.' };
       const fresh = await this.sales.lockOrder(q, orderId);
       const remaining = r2(fresh.total - fresh.paid_total);
       const sum = r2(d.payments.reduce((a, x) => a + x.amount, 0));

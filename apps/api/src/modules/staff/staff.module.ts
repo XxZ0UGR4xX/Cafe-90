@@ -4,7 +4,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { EmployeeDto } from '@retroburger/shared';
 import { DbService } from '../../database/db.service';
-import { notFound } from '../../common/errors';
+import { forbidden, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
 import { AuditService } from '../audit/audit.service';
 import { Require } from '../identity/access.decorators';
@@ -30,7 +30,13 @@ export class StaffService {
 
   save(idv: string | null, d: z.infer<typeof EmployeeDto>) {
     const p = ctx().principal!;
+    if (d.branchId ? !p.can('staff.employee.write', d.branchId) : p.branchScope('staff.employee.write') !== null) throw forbidden();   // destino: la sucursal indicada (o corporativo)
     return this.db.tx(async (q) => {
+      if (idv) {   // origen: la sucursal ACTUAL del empleado
+        const cur = (await q.query('SELECT branch_id FROM employees WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [idv])).rows[0];
+        if (!cur) throw notFound('employee');
+        if (cur.branch_id ? !p.can('staff.employee.write', cur.branch_id) : p.branchScope('staff.employee.write') !== null) throw forbidden();
+      }
       const sal = p.can('staff.salary.read') ? (d.salary ?? null) : null;   // sólo quien ve salarios puede fijarlos
       const vals = [d.branchId ?? null, d.userId ?? null, d.fullName, d.phone ?? null, d.email ?? null, d.position, d.hiredAt ?? null, d.status];
       const r = idv
@@ -43,7 +49,11 @@ export class StaffService {
   }
 
   remove(idv: string) {
+    const p = ctx().principal!;
     return this.db.tx(async (q) => {
+      const cur = (await q.query('SELECT branch_id FROM employees WHERE id=$1 AND deleted_at IS NULL', [idv])).rows[0];
+      if (!cur) throw notFound('employee');
+      if (cur.branch_id ? !p.can('staff.employee.write', cur.branch_id) : p.branchScope('staff.employee.write') !== null) throw forbidden();
       const r = await q.query(`UPDATE employees SET deleted_at = now(), status='INACTIVE' WHERE id=$1 AND deleted_at IS NULL`, [idv]);
       if (!r.rowCount) throw notFound('employee');
       await this.audit.record(q, { action: 'employee.delete', entity: 'employee', entityId: idv });

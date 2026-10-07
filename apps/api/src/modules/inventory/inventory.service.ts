@@ -99,7 +99,11 @@ export class InventoryService {
     return c;
   }
 
-  getCountById(id: string) { return this.db.tx((q) => this.getCount(q, id, true)); }
+  async getCountById(id: string) {
+    const c = await this.db.tx((q) => this.getCount(q, id, true));
+    this.assertBranch('inventory.count.write', c.branchId);   // el guard solo ve el id: se valida la sucursal del conteo
+    return c;
+  }
 
   submitCount(id: string, items: { ingredientId: string; countedQty: number }[]) {
     return this.db.tx(async (q) => {
@@ -107,8 +111,10 @@ export class InventoryService {
       if (!c) throw notFound('count');
       this.assertBranch('inventory.count.write', c.branch_id);
       if (c.status !== 'OPEN') throw new AppError('CONFLICT', 409);
+      // Al capturar el conteo se toma la foto del saldo de ESE momento: lo que se venda después no distorsiona la diferencia
       for (const it of items)
-        await q.query('UPDATE stock_count_items SET counted_qty = $3 WHERE count_id=$1 AND ingredient_id=$2', [id, it.ingredientId, it.countedQty]);
+        await q.query(`UPDATE stock_count_items SET counted_qty = $3, system_qty = COALESCE((SELECT qty FROM inventory WHERE branch_id = $4 AND ingredient_id = $2), system_qty)
+                        WHERE count_id=$1 AND ingredient_id=$2`, [id, it.ingredientId, it.countedQty, c.branch_id]);
       return this.getCount(q, id, true);
     });
   }
@@ -121,18 +127,18 @@ export class InventoryService {
       this.assertBranch('inventory.transfer.approve', c.branch_id);
       if (c.status !== 'OPEN') throw new AppError('CONFLICT', 409);
       const items = (await q.query(
-        `SELECT ci.ingredient_id, ci.counted_qty, inv.qty AS current_qty FROM stock_count_items ci
-           JOIN inventory inv ON inv.branch_id = $2 AND inv.ingredient_id = ci.ingredient_id
-          WHERE ci.count_id = $1 AND ci.counted_qty IS NOT NULL ORDER BY ci.ingredient_id`, [id, c.branch_id])).rows;
+        `SELECT ci.ingredient_id, ci.counted_qty, ci.system_qty FROM stock_count_items ci
+          WHERE ci.count_id = $1 AND ci.counted_qty IS NOT NULL ORDER BY ci.ingredient_id`, [id])).rows;
+      await this.engine.lockMany(q, c.branch_id, items.map((i) => i.ingredient_id));
       let adjusted = 0;
       for (const it of items) {
-        const diff = Math.round((it.counted_qty - it.current_qty) * 10000) / 10000;
+        const diff = Math.round((it.counted_qty - it.system_qty) * 10000) / 10000;   // contra el saldo de cuando se contó, no el de hoy
         if (diff === 0) continue;
         await this.engine.apply(q, { branchId: c.branch_id, ingredientId: it.ingredient_id, type: 'COUNT_ADJ', qty: diff, reason: `Inventario físico ${id.slice(0, 8)}`, refType: 'count', refId: id, allowNegative: true });
         adjusted++;
       }
       await q.query(`UPDATE stock_counts SET status='APPLIED', applied_by=$2, applied_at=now() WHERE id=$1`, [id, ctx().principal!.userId]);
-      await q.query(`UPDATE inventory SET needs_review = false WHERE branch_id = $1 AND qty >= 0`, [c.branch_id]);
+      await q.query(`UPDATE inventory SET needs_review = false WHERE branch_id = $1 AND qty >= 0 AND ingredient_id = ANY($2::uuid[])`, [c.branch_id, items.map((i) => i.ingredient_id)]);   // solo lo contado
       await this.audit.record(q, { action: 'inventory.count_applied', entity: 'stock_count', entityId: id, branchId: c.branch_id, newValue: { adjusted } });
       return this.getCount(q, id, false);
     });
@@ -156,7 +162,12 @@ export class InventoryService {
          FROM stock_transfers WHERE ($1::uuid IS NULL OR from_branch_id=$1 OR to_branch_id=$1)
           AND ($2::uuid[] IS NULL OR from_branch_id = ANY($2::uuid[]) OR to_branch_id = ANY($2::uuid[])) ORDER BY created_at DESC LIMIT 200`, [branchId ?? null, scope])).rows);
   }
-  getTransfer(id: string) { return this.db.tx((q) => this.transferById(q, id)); }
+  async getTransfer(id: string) {
+    const t = await this.db.tx((q) => this.transferById(q, id));
+    const p = ctx().principal!;
+    if (!p.can('inventory.transfer.read', t.fromBranchId) && !p.can('inventory.transfer.read', t.toBranchId)) throw forbidden({ permission: 'inventory.transfer.read' });
+    return t;
+  }
 
   createTransfer(d: Dict) {
     if (d.fromBranchId === d.toBranchId) throw new AppError('VALIDATION_ERROR', 400, { field: 'toBranchId' });
@@ -199,7 +210,10 @@ export class InventoryService {
           const received = got.get(it.ingredientId) ?? it.qtySent;
           if (received < 0 || received > it.qtySent) throw new AppError('VALIDATION_ERROR', 400, { field: 'qty', ingredient: it.name });
           await q.query('UPDATE stock_transfer_items SET qty_received=$2 WHERE id=$1', [it.id, received]);
-          if (received > 0) await this.engine.apply(q, { branchId: t.toBranchId, ingredientId: it.ingredientId, type: 'TRANSFER_IN', qty: received, refType: 'transfer', refId: id, reason: `Transferencia #${t.number}` });
+          // Lo despachado entra completo y el faltante sale como merma: el kardex explica cada unidad (nada «desaparece» en tránsito)
+          if (it.qtySent > 0) await this.engine.apply(q, { branchId: t.toBranchId, ingredientId: it.ingredientId, type: 'TRANSFER_IN', qty: it.qtySent, refType: 'transfer', refId: id, reason: `Transferencia #${t.number}` });
+          if (received < it.qtySent)
+            await this.engine.apply(q, { branchId: t.toBranchId, ingredientId: it.ingredientId, type: 'WASTE', qty: -(it.qtySent - received), refType: 'transfer', refId: id, reason: `Faltante en transferencia #${t.number}` });
           if (received < it.qtySent)
             await this.audit.record(q, { action: 'transfer.discrepancy', entity: 'stock_transfer', entityId: id, branchId: t.toBranchId, newValue: { ingredient: it.name, sent: it.qtySent, received } });
         }

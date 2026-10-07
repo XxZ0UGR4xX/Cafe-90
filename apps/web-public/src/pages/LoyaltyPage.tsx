@@ -4,7 +4,7 @@ import { api, ApiError } from '../api';
 
 export function LoyaltyPage({ info }: { info: any }) {
   const toast = useToast(); const [phone, setPhone] = useState(''); const [email, setEmail] = useState(''); const [d, setD] = useState<any>(null); const [busy, setBusy] = useState(false);
-  const look = async () => { setBusy(true); try { setD(await api('/loyalty', { query: { phone, email } })); } catch (e) { setD(null); toast.error(e instanceof ApiError ? e.message : '⚠️ No pudimos consultar tus puntos.'); } finally { setBusy(false); } };
+  const look = async () => { setBusy(true); try { setD(await api('/loyalty', { body: { phone, email } })); } catch (e) { setD(null); toast.error(e instanceof ApiError ? e.message : '⚠️ No pudimos consultar tus puntos.'); } finally { setBusy(false); } };
   return (
     <div className="rb-col"><RetroCard title="⭐ Mis puntos" tone="red"><div className="rb-col" style={{ maxWidth: 480 }}>
       <p style={{ margin: 0 }}>Cada <strong>${info?.loyalty?.currencyPerPoint ?? 10}</strong> gastados = 1 punto. Consulta con el teléfono y correo que registraste.</p>

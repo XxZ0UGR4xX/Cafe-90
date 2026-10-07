@@ -93,8 +93,14 @@ export class LoyaltyService {
       if (!o) throw notFound('order');
       if (o.payment_status === 'PAID' || ['CANCELLED', 'COMPLETED'].includes(o.status)) throw new AppError('ORDER_INVALID_TRANSITION', 409);
       if (!ctx().principal!.can('loyalty.redeem', o.branch_id)) throw new AppError('FORBIDDEN', 403);
-      const line = (await q.query(`SELECT unit_price FROM order_items WHERE order_id=$1 AND status <> 'CANCELLED' AND parent_item_id IS NULL AND ($2::uuid IS NULL OR product_id = $2) ORDER BY unit_price DESC LIMIT 1`, [d.orderId, reward.product_id])).rows[0];
+      if (o.customer_id && o.customer_id !== d.customerId) throw new AppError('VALIDATION_ERROR', 400, { message: 'La orden pertenece a otro cliente' });
+      const lines = (await q.query(`SELECT unit_price, qty FROM order_items WHERE order_id=$1 AND status <> 'CANCELLED' AND parent_item_id IS NULL AND ($2::uuid IS NULL OR product_id = $2) ORDER BY unit_price DESC`, [d.orderId, reward.product_id])).rows;
+      const line = lines[0];
       if (!line) throw new AppError('VALIDATION_ERROR', 400, { message: 'La orden no incluye el producto de la recompensa' });
+      // Un canje por unidad del producto en la cuenta: no se reutiliza el mismo producto ni se descuenta otro más caro
+      const units = reward.product_id ? lines.reduce((a: number, l: any) => a + Number(l.qty), 0) : 1;
+      const used = (await q.query(`SELECT count(*)::int n FROM order_discounts WHERE order_id=$1 AND kind='POINTS' AND reason=$2`, [d.orderId, `Canje: ${reward.name}`])).rows[0].n;
+      if (used >= units) throw new AppError('VALIDATION_ERROR', 400, { message: 'Esta recompensa ya se aplicó a todas las unidades del producto en la cuenta' });
       await this.move(q, d.customerId, 'REDEEM', -reward.points_cost, { orderId: d.orderId, rewardId: d.rewardId, reason: reward.name });
       await q.query(`UPDATE orders SET customer_id = COALESCE(customer_id, $2) WHERE id=$1`, [d.orderId, d.customerId]);
       await q.query(`INSERT INTO order_discounts (tenant_id, order_id, kind, value, amount, reason, created_by) VALUES (app_tenant_id(),$1,'POINTS',$2,$3,$4,$5)`,

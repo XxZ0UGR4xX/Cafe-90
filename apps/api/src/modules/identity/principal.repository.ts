@@ -7,8 +7,14 @@ export class PrincipalRepository {
   constructor(private readonly db: DbService) {}
 
   /** Carga identidad + permisos efectivos. Devuelve null si el usuario no existe/está deshabilitado. */
-  async load(userId: string, tenantId: string): Promise<Principal | null> {
+  async load(userId: string, tenantId: string, sessionId?: string): Promise<Principal | null> {
     return this.db.tx(async (q) => {
+      if (sessionId) {   // la sesión (familia de refresh) debe seguir vigente y el restaurante activo: logout/cambio de clave/suspensión cortan el acceso de inmediato
+        const live = (await q.query(
+          `SELECT (SELECT status FROM restaurants WHERE id = $2) AS tenant_status,
+                  EXISTS (SELECT 1 FROM refresh_tokens WHERE family_id = $1 AND user_id = $3 AND revoked_at IS NULL AND expires_at > now()) AS session_live`, [sessionId, tenantId, userId])).rows[0];
+        if (live.tenant_status === 'SUSPENDED' || !live.session_live) return null;
+      }
       const { rows } = await q.query(
         `SELECT u.full_name, u.status, r.key AS role_key, ur.branch_id, rp.permission_key
            FROM users u

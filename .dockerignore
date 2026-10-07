@@ -11,3 +11,8 @@ docs
 e2e/shots
 e2e/test-results
 e2e/playwright-report
+
+*.pem
+*.key
+*.age
+**/backups

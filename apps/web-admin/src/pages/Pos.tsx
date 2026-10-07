@@ -71,7 +71,7 @@ export function PosInner() {
     } catch (e) {
       if (e instanceof ApiError && e.isNetwork && !cart.orderId) {
         const clientUuid = crypto.randomUUID(); const label = `OFF-${String(cart.offline.length + 1).padStart(3, '0')}`;
-        await enqueue({ opId: crypto.randomUUID(), type: 'ORDER_CREATE', branchId, label, payload: { clientUuid, branchId, channel: cart.channel, tableId: cart.channel === 'DINE_IN' ? cart.tableId ?? undefined : undefined, customerId: cart.customer?.id, notes: cart.notes || undefined, send: true, items: toItems(lines) } });
+        await enqueue({ opId: crypto.randomUUID(), type: 'ORDER_CREATE', branchId, label, userId: useSession.getState().me?.id, payload: { clientUuid, branchId, channel: cart.channel, tableId: cart.channel === 'DINE_IN' ? cart.tableId ?? undefined : undefined, customerId: cart.customer?.id, notes: cart.notes || undefined, send: true, items: toItems(lines) } });
         cart.addOffline({ clientUuid, label, lines, total: totalsOf(lines).total, channel: cart.channel, tableId: cart.tableId ?? undefined, branchId, paid: false, createdAt: new Date().toISOString() });
         cart.set({ lines: [], activeOffline: clientUuid }); await refreshPending();
         toast.warn(`📡 Sin conexión: ${label} guardada. Se enviará a cocina al reconectar.`); return null;
@@ -95,11 +95,12 @@ export function PosInner() {
     setBusy(true);
     try {
       if (activeOffline) {   // cobro sin conexión: entra a la cola con IDs propios (idempotente)
-        await enqueue({ opId: crypto.randomUUID(), type: 'ORDER_PAY', branchId: branchId!, label: activeOffline.label, payload: { orderClientUuid: activeOffline.clientUuid, payments: payments.map((p) => ({ ...p, clientUuid: crypto.randomUUID() })) } });
+        await enqueue({ opId: crypto.randomUUID(), type: 'ORDER_PAY', branchId: branchId!, label: activeOffline.label, userId: useSession.getState().me?.id, payload: { orderClientUuid: activeOffline.clientUuid, payments: payments.map((p) => ({ ...p, clientUuid: crypto.randomUUID() })) } });
         cart.markOfflinePaid(activeOffline.clientUuid); await refreshPending(); setModal(null); toast.warn(`📡 Cobro de ${activeOffline.label} guardado; se registrará en caja al reconectar.`); play('coin'); void syncNow(); return;
       }
       const id = (await send()) ?? cart.orderId; if (!id) return;
       const res = await withSup(() => post(`/orders/${id}/pay`, { payments: payments.map((p) => ({ ...p, clientUuid: crypto.randomUUID() })) }));
+      if (res.priceChanged) { setModal(null); qc.invalidateQueries({ queryKey: ['orders'] }); toast.warn(res.message); return; }   // el total cambió (promoción agotada): nada se cobró
       play('coin'); setModal(null); setLastOrder(res); cart.reset(); qc.invalidateQueries({ queryKey: ['tables'] }); qc.invalidateQueries({ queryKey: ['orders'] });
       toast.ok(res.change ? `🪙 Cobrado. Cambio: ${formatMoney2(res.change)}` : '🪙 Venta completada');
     } catch (e) {

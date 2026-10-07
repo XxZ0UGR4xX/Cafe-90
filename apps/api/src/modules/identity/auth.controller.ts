@@ -26,12 +26,17 @@ const COOKIE = 'rb_refresh';
 /** Limita intentos de login por IP+identificador (además del bloqueo por cuenta en BD). */
 @Injectable()
 export class LoginRateLimitGuard implements CanActivate {
-  private readonly limiter: RateLimiter;
-  constructor(@Inject(ENV) env: Env, @Inject(REDIS) redis: RedisClient) { this.limiter = createRateLimiter(redis, env.LOGIN_RATE_LIMIT_MAX, 60_000, 'login'); }
+  private readonly limiter: RateLimiter; private readonly byIp: RateLimiter;
+  constructor(@Inject(ENV) env: Env, @Inject(REDIS) redis: RedisClient) {
+    this.limiter = createRateLimiter(redis, env.LOGIN_RATE_LIMIT_MAX, 60_000, 'login');
+    this.byIp = createRateLimiter(redis, env.LOGIN_IP_RATE_LIMIT_MAX, 60_000, 'login-ip');   // independiente del identificador: rotar cuentas/códigos no lo evita
+  }
   async canActivate(c: ExecutionContext): Promise<boolean> {
     const req = c.switchToHttp().getRequest<FastifyRequest>();
     const b = (req.body ?? {}) as Record<string, string>;
-    if (await this.limiter.hit(`${req.ip}|${b.tenant}|${b.email ?? b.userCode ?? b.mfaToken?.slice(-24)}`)) throw new AppError('RATE_LIMITED', 429, undefined, true);
+    const ident = String(b.email ?? b.userCode ?? b.mfaToken?.slice(-24) ?? '').toLowerCase();
+    if (await this.byIp.hit(`${req.ip}|${String(b.tenant).toLowerCase()}`) || await this.limiter.hit(`${req.ip}|${String(b.tenant).toLowerCase()}|${ident}`))
+      throw new AppError('RATE_LIMITED', 429, undefined, true);
     return true;
   }
 }
@@ -100,7 +105,7 @@ export class AuthController {
     catch (e) { reply.clearCookie(COOKIE, { path: '/auth' }); throw e; }
   }
 
-  @Authenticated() @Post('logout') @HttpCode(204)
+  @Public() @Post('logout') @HttpCode(204)
   async logout(@Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
     this.csrf(req);
     await this.auth.logout(req.cookies?.[COOKIE]);

@@ -30,7 +30,12 @@ export class PrintingService {
   savePrinter(id: string | null, d: Dict) {
     if (!ctx().principal!.can('printing.manage', d.branchId)) throw forbidden();
     return this.db.tx(async (q) => {
-      const vals = [d.branchId, d.name, d.role, JSON.stringify(d.connection), d.columns, d.stationKeys, d.isActive];
+      if (id) {   // también sobre la sucursal ACTUAL de la impresora, y no se reasigna a otra
+        const cur = (await q.query('SELECT branch_id FROM printers WHERE id=$1 FOR UPDATE', [id])).rows[0];
+        if (!cur) throw notFound('printer');
+        if (!ctx().principal!.can('printing.manage', cur.branch_id) || cur.branch_id !== d.branchId) throw forbidden();
+      }
+      const vals = [d.branchId, d.name, d.role, JSON.stringify(d.connection ?? {}), d.columns, d.stationKeys, d.isActive];
       const r = id
         ? await q.query(`UPDATE printers SET branch_id=$1,name=$2,role=$3,connection=$4,columns=$5,station_keys=$6,is_active=$7 WHERE id=$8 RETURNING id`, [...vals, id])
         : await q.query(`INSERT INTO printers (tenant_id, branch_id, name, role, connection, columns, station_keys, is_active) VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6,$7) RETURNING id`, vals);
@@ -79,7 +84,20 @@ export class PrintingService {
     return o;
   }
 
-  receiptText(orderId: string, width = 42) { return this.db.tx(async (q) => renderReceipt(await this.receiptData(q, orderId), width)); }
+  /** Ticket en texto. Mismo alcance que ver la orden (sucursal + propietario) y el código de autofactura solo para quien cobra. */
+  receiptText(orderId: string, width = 42) {
+    return this.db.tx(async (q) => {
+      const o = (await q.query('SELECT branch_id, waiter_id, created_by, source FROM orders WHERE id=$1', [orderId])).rows[0];
+      if (!o) throw notFound('order');
+      const p = ctx().principal!;
+      if (!p.can('sales.order.read', o.branch_id)) throw forbidden();
+      const shared = o.source === 'PUBLIC' || o.source === 'QR';
+      if (!shared && !p.can('sales.order.readAll', o.branch_id) && o.waiter_id !== p.userId && o.created_by !== p.userId) throw forbidden();
+      const data = await this.receiptData(q, orderId);
+      if (!p.can('sales.order.pay', o.branch_id)) { data.invoiceCode = null; }
+      return renderReceipt(data, width);
+    });
+  }
   purchaseOrderText(po: Dict, width = 42) { return renderPurchaseOrder(po, width); }
 
   /** Cola de una impresora. El alcance por sucursal se valida contra la impresora (no se leen trabajos de otra sucursal). */

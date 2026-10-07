@@ -26,4 +26,11 @@ describe('límite global de peticiones', () => {
     expect(a.filter((s) => s === 200).length).toBe(20); expect(a.slice(20)).toEqual([429, 429]);
     expect(await hit(tokB, 3)).toEqual([200, 200, 200]);       // otra sesión, misma IP: intacta
   });
+
+  it('un Bearer inventado NO da un cubo propio: cae en el límite de su IP', async () => {
+    const ip = { 'x-forwarded-for': '10.3.3.3' }; const codes: number[] = [];
+    for (let i = 0; i < 8; i++) codes.push((await api.req('GET', '/health', { headers: { ...ip, authorization: `Bearer falso-${i}-${Math.random()}` } })).status);
+    expect(codes.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+    expect(codes.slice(5)).toEqual([429, 429, 429]);
+  });
 });

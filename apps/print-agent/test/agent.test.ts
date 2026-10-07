@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PrintAgent } from '../src/agent';
 import type { AgentApi, PrintJob, PrinterInfo } from '../src/client';
-import { fileTransport, networkTransport, PrinterOfflineError, type Transport } from '../src/transport';
+import { fileTransport, networkTransport, PrinterOfflineError, transportFor, type Transport } from '../src/transport';
 
 const printer = (over: Partial<PrinterInfo> = {}): PrinterInfo => ({ id: 'p1', branchId: 'b', name: 'Cocina', role: 'KITCHEN', connection: { type: 'network', host: '127.0.0.1', port: 1 }, columns: 42, isActive: true, ...over });
 
@@ -35,6 +35,22 @@ describe('transportes', () => {
     await fileTransport(f).send(Buffer.from('ab')); await fileTransport(f).send(Buffer.from('cd'));
     expect((await readFile(f)).toString()).toBe('abcd');
     await expect(fileTransport(join(dir, 'no', 'existe', 'lp')).send(Buffer.from('x'))).rejects.toBeInstanceOf(PrinterOfflineError);
+  });
+});
+
+describe('política local del agente (el servidor no manda sobre el equipo)', () => {
+  const pol = { allowedPaths: ['/dev/'], allowedHosts: ['impresora.local'], allowPublic: false };
+  it('solo dispositivos /dev y hosts de la red local', () => {
+    expect(transportFor({ type: 'file', path: '/home/pi/.profile' }, pol)).toBeNull();
+    expect(transportFor({ type: 'file', path: '/dev/../etc/cron.d/x' }, pol)).toBeNull();
+    expect(transportFor({ type: 'usb', path: '/dev/usb/lp0' }, pol)).not.toBeNull();
+    expect(transportFor({ type: 'network', host: '192.168.1.50', port: 9100 }, pol)).not.toBeNull();
+    expect(transportFor({ type: 'network', host: '8.8.8.8' }, pol)).toBeNull();
+    expect(transportFor({ type: 'network', host: '169.254.169.254' }, pol)).toBeNull();
+    expect(transportFor({ type: 'network', host: 'otro.example.com' }, pol)).toBeNull();
+    expect(transportFor({ type: 'network', host: 'impresora.local' }, pol)).not.toBeNull();
+    expect(transportFor({ type: 'network', host: '10.0.0.5', port: 70000 }, pol)).toBeNull();
+    expect(transportFor({ type: 'network', host: '8.8.8.8' }, { ...pol, allowPublic: true })).not.toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 name: CI
 on: { push: { branches: ['**'] }, pull_request: {} }
+permissions: { contents: read }   # el workflow solo lee el repositorio
 jobs:
   test:
     runs-on: ubuntu-latest

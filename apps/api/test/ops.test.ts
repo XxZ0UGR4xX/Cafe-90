@@ -210,8 +210,8 @@ describe('API pública, QR y pedidos en línea', () => {
     const startsAt = new Date(Date.now() + 7200_000 * 3).toISOString();
     const r = await api.req('POST', `/public/${f.t.slug}/reservations`, { body: { branchId: f.branchId, customerName: 'Kevin Arnold', phone: '5559876543', partySize: 3, startsAt } });
     expect(r.status, JSON.stringify(r.body)).toBe(201); expect(r.body.status).toBe('PENDING'); expect(r.body.tableId).toBeTruthy();
-    expect((await api.req('GET', `/public/${f.t.slug}/loyalty?phone=555-0001&email=marty@x.test`)).body.balance).toBe(17);
-    expect((await api.req('GET', `/public/${f.t.slug}/loyalty?phone=555-0001&email=otro@x.test`)).status).toBe(404);
+    expect((await api.req('POST', `/public/${f.t.slug}/loyalty`, { body: { phone: '555-0001', email: 'marty@x.test' } })).body.balance).toBe(17);
+    expect((await api.req('POST', `/public/${f.t.slug}/loyalty`, { body: { phone: '555-0001', email: 'otro@x.test' } })).status).toBe(404);
   });
 });
 

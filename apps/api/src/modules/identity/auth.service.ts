@@ -67,7 +67,9 @@ export class AuthService {
           newValue: { ident: mode === 'email' ? ident : `code:${ident}`, reason: 'unknown_or_disabled' } });
         return { fail: 'INVALID_CREDENTIALS' as const };
       }
-      if (u.locked_until && new Date(u.locked_until) > new Date()) return { fail: 'ACCOUNT_LOCKED' as const };
+      // Cuenta bloqueada: solo quien presenta la credencial CORRECTA se entera (423). Con credencial errónea la respuesta es la
+      // misma que para un usuario inexistente, y el bloqueo no se prolonga: así no sirve para enumerar cuentas ni para mantenerlas bloqueadas.
+      if (u.locked_until && new Date(u.locked_until) > new Date()) return { fail: (ok ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS') as 'ACCOUNT_LOCKED' | 'INVALID_CREDENTIALS' };
       if (!ok) {
         const attempts = u.failed_attempts + 1;
         const lock = attempts >= MAX_FAILED;
@@ -76,7 +78,7 @@ export class AuthService {
           [u.id, lock ? 0 : attempts, lock, String(LOCK_MINUTES)]);
         await this.audit.record(q, { action: `${action}_failed`, entity: 'user', entityId: u.id, userId: u.id,
           newValue: { attempts, locked: lock } });
-        return { fail: (lock ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS') as 'ACCOUNT_LOCKED' | 'INVALID_CREDENTIALS' };
+        return { fail: 'INVALID_CREDENTIALS' as const };
       }
       // 2FA: con la contraseña correcta aún NO se reinician los intentos (los códigos fallidos cuentan para el bloqueo).
       const mfaStep = await this.mfaStepFor(q, u.id, !!u.mfa_enabled_at);
@@ -156,17 +158,18 @@ export class AuthService {
     return out.session;
   }
 
+  /** Cierra la sesión revocando toda la familia del refresh token. No exige access token vigente (puede haber expirado). */
   async logout(token: string | undefined): Promise<void> {
-    const p = ctx().principal;
-    if (!p) return;
+    if (!token) return;
+    const hash = hashToken(token);
+    const tenantId = (await this.db.system<{ t: string | null }>('SELECT resolve_refresh_tenant($1) AS t', [hash])).rows[0]?.t;
+    if (!tenantId) return;
     await this.db.tx(async (q) => {
-      if (token) {
-        await q.query(
-          `UPDATE refresh_tokens SET revoked_at = now() WHERE family_id =
-             (SELECT family_id FROM refresh_tokens WHERE token_hash = $1) AND revoked_at IS NULL`, [hashToken(token)]);
-      }
-      await this.audit.record(q, { action: 'auth.logout', entity: 'user', entityId: p.userId });
-    });
+      const fam = (await q.query('SELECT user_id, family_id FROM refresh_tokens WHERE token_hash = $1', [hash])).rows[0];
+      if (!fam) return;
+      await q.query('UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL', [fam.family_id]);
+      await this.audit.record(q, { action: 'auth.logout', entity: 'user', entityId: fam.user_id, userId: fam.user_id });
+    }, tenantId);
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {

@@ -6,3 +6,6 @@ process.env.JWT_ACCESS_SECRET ??= 'test-secret-test-secret-test-secret-123456';
 process.env.LOGIN_RATE_LIMIT_MAX ??= '1000';
 process.env.RATE_LIMIT_MAX ??= '100000';
 process.env.RATE_LIMIT_AUTH_MAX ??= '1000000';
+process.env.LOGIN_IP_RATE_LIMIT_MAX ??= '100000';
+process.env.PUBLIC_SENSITIVE_RATE_LIMIT_MAX ??= '100000';
+process.env.PUBLIC_READ_RATE_LIMIT_MAX ??= '100000';

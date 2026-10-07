@@ -68,11 +68,12 @@ export class PurchasingService {
   }
 
   listQuotes(branchId?: string) {
+    const scope = ctx().principal!.branchScope('purchasing.order.read');
     return this.db.tx(async (q) => (await q.query(
       `SELECT qt.id, qt.branch_id AS "branchId", s.name AS supplier, qt.status, qt.valid_until AS "validUntil",
               COALESCE(sum(i.qty * i.unit_price),0) AS total, qt.created_at AS "createdAt"
          FROM purchase_quotes qt JOIN suppliers s ON s.id = qt.supplier_id LEFT JOIN purchase_quote_items i ON i.quote_id = qt.id
-        WHERE $1::uuid IS NULL OR qt.branch_id = $1 GROUP BY qt.id, s.name ORDER BY qt.created_at DESC LIMIT 100`, [branchId ?? null])).rows);
+        WHERE ($1::uuid IS NULL OR qt.branch_id = $1) AND ($2::uuid[] IS NULL OR qt.branch_id = ANY($2::uuid[])) GROUP BY qt.id, s.name ORDER BY qt.created_at DESC LIMIT 100`, [branchId ?? null, scope])).rows);
   }
 
   /** Acepta la cotización y genera la orden de compra en borrador. */
@@ -128,7 +129,11 @@ export class PurchasingService {
         ORDER BY po.created_at DESC LIMIT 200`, [branchId ?? null, status ?? null, scope])).rows);
   }
 
-  getOrder(id: string) { return this.db.tx((q) => this.orderById(q, id)); }
+  async getOrder(id: string) {
+    const o = await this.db.tx((q) => this.orderById(q, id));
+    this.assertBranch('purchasing.order.read', o.branchId);
+    return o;
+  }
 
   /** DRAFT → SENT, o PENDING_APPROVAL si supera el umbral configurable. */
   submitOrder(id: string) {
@@ -177,11 +182,18 @@ export class PurchasingService {
       const receiptId = (await q.query(`INSERT INTO goods_receipts (tenant_id, branch_id, purchase_order_id, notes, received_by) VALUES (app_tenant_id(),$1,$2,$3,$4) RETURNING id`,
         [o.branchId, id, d.notes ?? null, ctx().principal!.userId])).rows[0].id;
       const lines = [...d.items].sort((a: Dict, b: Dict) => (a.ingredientId < b.ingredientId ? -1 : 1));
+      const inThisCall = new Map<string, number>();   // renglones repetidos del mismo insumo se acumulan contra el tope
+      const mayVaryCost = ctx().principal!.can('purchasing.order.approve', o.branchId);
       for (const it of lines) {
         const line = o.items.find((x: Dict) => x.ingredientId === it.ingredientId);
         if (!line) throw new AppError('VALIDATION_ERROR', 400, { ingredientId: it.ingredientId, message: 'No pertenece a la orden' });
-        if (r4(line.qtyReceived + it.qty) > line.qty * 1.1) throw new AppError('VALIDATION_ERROR', 400, { ingredient: line.name, message: 'Excede lo ordenado (+10 % tolerancia)' });
+        const accumulated = r4(line.qtyReceived + (inThisCall.get(it.ingredientId) ?? 0) + it.qty);
+        if (accumulated > line.qty * 1.1) throw new AppError('VALIDATION_ERROR', 400, { ingredient: line.name, message: 'Excede lo ordenado (+10 % tolerancia)' });
+        inThisCall.set(it.ingredientId, r4((inThisCall.get(it.ingredientId) ?? 0) + it.qty));
         const unitCost = it.unitCost ?? line.unitPrice;
+        // El costo recibido no puede alejarse del precio pactado sin autorización de compras (valuaría el inventario sin control)
+        if (it.unitCost != null && line.unitPrice > 0 && Math.abs(it.unitCost - line.unitPrice) / line.unitPrice > 0.1 && !mayVaryCost)
+          throw new AppError('VALIDATION_ERROR', 400, { ingredient: line.name, message: 'El costo difiere más de 10 % del precio de la orden: requiere aprobación de compras' });
         await q.query('UPDATE purchase_order_items SET qty_received = qty_received + $3 WHERE purchase_order_id=$1 AND ingredient_id=$2', [id, it.ingredientId, it.qty]);
         await q.query('INSERT INTO goods_receipt_items (tenant_id, receipt_id, ingredient_id, qty, unit_cost, lot_code, expires_on) VALUES (app_tenant_id(),$1,$2,$3,$4,$5,$6)', [receiptId, it.ingredientId, it.qty, unitCost, it.lotCode ?? null, it.expiresOn ?? null]);
         await this.engine.apply(q, { branchId: o.branchId, ingredientId: it.ingredientId, type: 'PURCHASE_IN', qty: it.qty, unitCost, lotCode: it.lotCode, expiresOn: it.expiresOn, refType: 'purchase_order', refId: id, reason: `OC #${o.number}`, supplierId: o.supplierId });
@@ -199,8 +211,13 @@ export class PurchasingService {
     return this.db.tx(async (q) => {
       let flag = false;
       if (d.purchaseOrderId) {
+        const po = (await q.query('SELECT supplier_id FROM purchase_orders WHERE id=$1', [d.purchaseOrderId])).rows[0];
+        if (!po) throw notFound('purchase_order');
+        if (po.supplier_id !== d.supplierId) throw new AppError('VALIDATION_ERROR', 400, { field: 'supplierId', message: 'El proveedor no coincide con el de la orden de compra' });
         const received = (await q.query(`SELECT COALESCE(sum(qty_received * unit_price),0) AS v FROM purchase_order_items WHERE purchase_order_id=$1`, [d.purchaseOrderId])).rows[0].v as number;
-        flag = received > 0 ? Math.abs(d.total - received) / received > PRICE_VARIANCE : true;
+        // Varias facturas contra la misma OC se cotejan en conjunto: la suma no puede rebasar lo recibido
+        const previous = Number((await q.query(`SELECT COALESCE(sum(total),0) AS v FROM supplier_invoices WHERE purchase_order_id=$1 AND status <> 'CANCELLED'`, [d.purchaseOrderId])).rows[0].v);
+        flag = received > 0 ? Math.abs(previous + d.total - received) / received > PRICE_VARIANCE : true;
       }
       const row = (await q.query(
         `INSERT INTO supplier_invoices (tenant_id, supplier_id, purchase_order_id, invoice_number, total, issued_on, due_on, price_variance_flag)

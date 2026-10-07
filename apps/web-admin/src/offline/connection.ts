@@ -14,8 +14,11 @@ export async function refreshPending() { useConnection.getState().set({ pending:
 /** Envía la cola en orden de captura. Idempotente (opId): reintentar nunca duplica. Nunca descarta una venta: lo irreparable queda en la bandeja del servidor. */
 export async function syncNow(): Promise<{ applied: number; review: number } | null> {
   if (syncing || useSession.getState().status !== 'ready') return null;
-  const ops = await listOps();
-  useConnection.getState().set({ pending: ops.length });
+  const me = useSession.getState().me?.id;
+  const all = await listOps();
+  useConnection.getState().set({ pending: all.length });
+  // Las operaciones se aplican con la identidad de quien sincroniza: las capturadas por OTRA persona esperan a que ella inicie sesión.
+  const ops = all.filter(({ op }) => !op.userId || op.userId === me);
   if (!ops.length) return { applied: 0, review: 0 };
   syncing = true; useConnection.getState().set({ state: 'syncing' });
   let applied = 0; let review = 0;

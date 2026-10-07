@@ -32,12 +32,13 @@ function OrdersInner({ branchId }: { branchId: string }) {
 export function OrderDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useGet<any>(['orders', 'one', id], `/orders/${id}`); const { can } = useSession(); const withSup = useWithSupervisor();
   const [inv, setInv] = useState<null | 'new' | string>(null);
+  const [refundKey, setRefundKey] = useState(() => crypto.randomUUID());   // idempotencia: un doble clic no devuelve dos veces
   const [mode, setMode] = useState<null | 'cancel' | 'refund'>(null); const [reason, setReason] = useState(''); const [method, setMethod] = useState('CASH');
   const o = q.data;
   const canInvoice = !!o && o.paymentStatus === 'PAID' && o.status !== 'CANCELLED' && can('fiscal.invoice.issue', o.branchId);
   const invs = useGet<any[]>(['invoices', 'order', id], '/invoices', { orderId: id }, { enabled: canInvoice });
   const active = (invs.data ?? []).find((x) => ['STAMPED', 'PENDING', 'CANCEL_PENDING'].includes(x.status));
-  const run = useAct(() => withSup((sup) => mode === 'cancel' ? post(`/orders/${id}/cancel`, { reason, supervisor: sup }) : post(`/orders/${id}/refund`, { method, reason, supervisor: sup })), { invalidate: [['orders'], ['tables']], ok: 'Listo', onSuccess: () => { setMode(null); setReason(''); } });
+  const run = useAct(() => withSup((sup) => mode === 'cancel' ? post(`/orders/${id}/cancel`, { reason, supervisor: sup }) : post(`/orders/${id}/refund`, { method, reason, supervisor: sup, clientUuid: refundKey })), { invalidate: [['orders'], ['tables']], ok: 'Listo', onSuccess: () => { setMode(null); setReason(''); setRefundKey(crypto.randomUUID()); } });
   const send = useAct(() => post(`/orders/${id}/send-to-kitchen`), { invalidate: [['orders'], ['kitchen']], ok: '🔥 Enviado a cocina' });
   return (
     <RetroModal open onClose={onClose} size="lg" title={o ? `Orden #${String(o.number).padStart(4, '0')}` : 'Orden'} footer={o && <>
