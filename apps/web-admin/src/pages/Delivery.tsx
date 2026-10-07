@@ -24,7 +24,7 @@ function Inner({ branchId }: { branchId: string }) {
   return (
     <>
       {staff && <div className="rb-row"><RetroButton variant="neon" onClick={() => setF({ name: '', phone: '', address: '', fee: 30, paymentMethod: 'CASH', items: [] })}>+ Pedido a domicilio</RetroButton></div>}
-      <Async q={q}><div className="rb-kds" style={{ gridTemplateColumns: `repeat(${staff ? 7 : 3}, minmax(250px, 1fr))` }}>{COLS.filter(([k]) => staff || ['READY', 'ON_THE_WAY', 'DELIVERED'].includes(k)).map(([k, label]) => {
+      <Async q={q}><div className="rb-kds" tabIndex={0} role="region" aria-label="Tablero de pedidos a domicilio (desplazable con el teclado)" style={{ gridTemplateColumns: `repeat(${staff ? 7 : 3}, minmax(250px, 1fr))` }}>{COLS.filter(([k]) => staff || ['READY', 'ON_THE_WAY', 'DELIVERED'].includes(k)).map(([k, label]) => {
         const list = rows.filter((r) => r.status === k);
         return <div key={k} className="rb-kds__col"><div className="rb-kds__head"><span>{label}</span><RetroBadge tone="dark">{list.length}</RetroBadge></div><div className="rb-kds__list">{list.map((d) => (
           <RetroCard key={d.id} title={`#${String(d.number).padStart(4, '0')} · ${d.customerName}`} tone="plain"><div className="rb-col" style={{ gap: 6 }}>

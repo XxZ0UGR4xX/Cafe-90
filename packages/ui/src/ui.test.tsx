@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RetroButton, RetroDialog, RetroModal, RetroTable, RetroTabs, RetroStatCard, RetroToastProvider, useToast, formatMoney, mmss, niceScale, RetroKitchenTicket, RetroTableCard } from './index';
+
+afterEach(cleanup);
 
 describe('utilidades', () => {
   it('formatMoney y mmss', () => { expect(formatMoney(129)).toContain('129'); expect(mmss(512)).toBe('08:32'); expect(mmss(-5)).toBe('00:00'); });
@@ -48,5 +51,40 @@ describe('componentes Retro*', () => {
     render(<><RetroKitchenTicket seconds={512} t={{ id: '1', number: 38, tableNumber: 12, channel: 'DINE_IN', stationKey: 'PARRILLA', round: 1, status: 'NEW', elapsedSeconds: 512, sla: 'warn', items: [{ id: 'i', name: 'Retro Burger', qty: 2, modifiers: ['SIN Cebolla'], notes: 'Extra queso' }] }} />
       <RetroTableCard number={12} capacity={4} status="OCCUPIED" seconds={90} total={248} /></>);
     expect(screen.getByText('⏱ 08:32')).toBeTruthy(); expect(screen.getByText('SIN Cebolla')).toBeTruthy(); expect(screen.getByText(/Ocupada/)).toBeTruthy(); expect(screen.getByText('MESA 12')).toBeTruthy();
+  });
+});
+
+describe('RetroModal: foco y teclado', () => {
+  // Regresión: con un `onClose` en línea (nuevo en cada render) el foco volvía al primer campo en cada tecla.
+  function Form() {
+    const [a, setA] = useState(''); const [b, setB] = useState(''); const [open, setOpen] = useState(true);
+    return <><button>afuera</button><RetroModal open={open} title="Datos" onClose={() => setOpen(false)}>
+      <label>Nombre<input aria-label="nombre" value={a} onChange={(e) => setA(e.target.value)} /></label>
+      <label>Teléfono<input aria-label="telefono" value={b} onChange={(e) => setB(e.target.value)} /></label>
+    </RetroModal></>;
+  }
+  it('al teclear en el 2.º campo el foco no salta al 1.º aunque el padre se re-renderice con cada tecla', async () => {
+    render(<Form />);
+    const tel = screen.getByLabelText('telefono') as HTMLInputElement;
+    tel.focus();
+    for (const ch of '5551') { fireEvent.change(tel, { target: { value: tel.value + ch } }); expect(document.activeElement).toBe(tel); }
+    expect(tel.value).toBe('5551'); expect((screen.getByLabelText('nombre') as HTMLInputElement).value).toBe('');
+  });
+  it('enfoca el primer campo al abrir, atrapa el Tab dentro del diálogo y devuelve el foco al cerrar', () => {
+    render(<Form />);
+    const nombre = screen.getByLabelText('nombre'); const tel = screen.getByLabelText('telefono'); const cerrar = screen.getByLabelText('Cerrar');
+    expect(document.activeElement).toBe(nombre);                                          // al abrir: primer campo del cuerpo
+    tel.focus(); fireEvent.keyDown(document, { key: 'Tab' });                             // último elemento → primero (✕ del encabezado)
+    expect(document.activeElement).toBe(cerrar);
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });                          // primero → último
+    expect(document.activeElement).toBe(tel);
+    (screen.getByText('afuera') as HTMLElement).focus(); fireEvent.keyDown(document, { key: 'Tab' });   // foco fuera → vuelve adentro
+    expect(document.activeElement).toBe(cerrar);
+  });
+  it('el diálogo tiene nombre accesible (su título) y Escape lo cierra', () => {
+    render(<Form />);
+    expect(screen.getByRole('dialog', { name: 'Datos' })).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

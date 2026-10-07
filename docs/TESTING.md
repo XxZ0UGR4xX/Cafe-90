@@ -22,3 +22,7 @@ Para E2E: levantar API (`pnpm dev:api`), `pnpm dev:web`, `pnpm --filter @retrobu
 ## Concurrencia, réplicas y carga
 - `stress.test.ts` (120 flujos simultáneos), `db-retry.test.ts` (deadlock real → reintento), `rate-limit-global.test.ts` (429 JSON, cubo por token), `redis.test.ts` (límite y WebSocket compartidos entre dos instancias; se omite sin `REDIS_URL`, en CI corre con un servicio redis). Ver `docs/PERFORMANCE.md`.
 - Local con Redis: `docker run -d -p 6379:6379 redis:7-alpine` y `REDIS_URL=redis://localhost:6379 pnpm --filter @retroburger/api test`.
+
+## Accesibilidad y teclado
+- `e2e/tests/a11y.spec.ts`: axe-core (WCAG 2.1 A/AA) sobre **18 pantallas del admin**, 4 del sitio público y 18 diálogos/pestañas; falla con cualquier violación seria o crítica. Hallazgos corregidos: contraste del verde de texto (token `--ok-text`; `--neon-dark` sólo para bordes y rellenos), campos sin etiqueta y tableros desplazables sin foco de teclado.
+- `e2e/tests/keyboard.spec.ts` + pruebas de `RetroModal` en `packages/ui`: **teclear de corrido** en un modal (bug real: el foco volvía al primer campo en cada tecla) y trampa de Tab. Diálogos con nombre accesible.

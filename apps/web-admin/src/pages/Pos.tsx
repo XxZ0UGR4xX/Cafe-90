@@ -199,7 +199,7 @@ export function PosInner() {
         <p style={{ marginTop: 0 }}>Necesitas una caja abierta para cobrar. Cuenta tu fondo inicial.</p><RetroInput label="Fondo inicial" large inputMode="decimal" value={float} onChange={(e) => setFloat(e.target.value.replace(/[^\d.]/g, ''))} />
       </RetroModal>
       <RetroModal open={!!lastOrder} size="sm" title="🪙 Venta completada" onClose={() => setLastOrder(null)} footer={<><RetroButton variant="white" onClick={() => { void printReceipt(lastOrder.id); }}>🖨️ Ticket</RetroButton><RetroButton variant="neon" onClick={() => setLastOrder(null)}>Nueva orden</RetroButton></>}>
-        <div className="rb-col" style={{ textAlign: 'center' }}><div style={{ fontSize: '3rem' }}>🍔✨</div><div className="rb-display" style={{ fontSize: '1.6rem' }}>{formatMoney2(lastOrder?.total)}</div>{lastOrder?.change > 0 && <div className="rb-display" style={{ color: 'var(--neon-dark)' }}>CAMBIO {formatMoney2(lastOrder.change)}</div>}<span className="rb-hint">Orden #{String(lastOrder?.number ?? 0).padStart(4, '0')} · {me?.fullName}</span></div>
+        <div className="rb-col" style={{ textAlign: 'center' }}><div style={{ fontSize: '3rem' }}>🍔✨</div><div className="rb-display" style={{ fontSize: '1.6rem' }}>{formatMoney2(lastOrder?.total)}</div>{lastOrder?.change > 0 && <div className="rb-display" style={{ color: 'var(--ok-text)' }}>CAMBIO {formatMoney2(lastOrder.change)}</div>}<span className="rb-hint">Orden #{String(lastOrder?.number ?? 0).padStart(4, '0')} · {me?.fullName}</span></div>
       </RetroModal>
     </>
   );

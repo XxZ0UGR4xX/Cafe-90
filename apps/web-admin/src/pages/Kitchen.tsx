@@ -29,7 +29,7 @@ function KitchenInner({ branchId }: { branchId: string }) {
           <RetroButton size="sm" variant="ink" onClick={() => setNight(!night)}>{night ? '☀️' : '🌙'}</RetroButton></span>
       </div>
       {tab === 'kds' ? (
-        <div className="rb-kds">{COLS.map((c) => {
+        <div className="rb-kds" tabIndex={0} role="region" aria-label="Tablero de comandas (desplazable con el teclado)">{COLS.map((c) => {
           const list = tickets.filter((t) => t.status === c.key);
           return <div key={c.key} className="rb-kds__col"><div className="rb-kds__head"><span>{c.label}</span><RetroBadge tone="dark">{list.length}</RetroBadge></div>
             <div className="rb-kds__list">{list.map((t) => <div key={t.id}><RetroKitchenTicket t={{ ...t, sla: slaOf(t) }} seconds={live(t)} onClick={c.next ? () => bump.mutate({ id: t.id, to: c.next }) : undefined} actionLabel={c.next ? c.action : undefined} />

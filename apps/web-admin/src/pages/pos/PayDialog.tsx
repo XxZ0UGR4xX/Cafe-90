@@ -32,7 +32,7 @@ export function PayDialog({ open, total, remaining, onClose, onSubmit, busy }: {
           {method === 'CASH' && <>
             <RetroInput label="Efectivo recibido" large inputMode="decimal" value={tendered} onChange={(e) => setTendered(e.target.value.replace(/[^\d.]/g, ''))} />
             <div className="rb-row rb-wrap">{quick.map((q) => <RetroButton key={q} size="sm" variant="mustard" onClick={() => setTendered(String(q))}>{q === left ? 'Exacto' : formatMoney2(q)}</RetroButton>)}</div>
-            {change > 0 && <div className="rb-display" style={{ fontSize: '1.6rem', color: 'var(--neon-dark)' }}>CAMBIO {formatMoney2(change)}</div>}
+            {change > 0 && <div className="rb-display" style={{ fontSize: '1.6rem', color: 'var(--ok-text)' }}>CAMBIO {formatMoney2(change)}</div>}
           </>}
           {method !== 'CASH' && <RetroInput label="Referencia / autorización" value={reference} onChange={(e) => setReference(e.target.value)} maxLength={80} />}
         </div>

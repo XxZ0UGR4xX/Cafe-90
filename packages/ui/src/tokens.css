@@ -6,6 +6,7 @@
   --cream: #fff4dc; --cream-2: #ffe9b8; --paper: #ffffff;
   --ink: #111111; --ink-2: #3b3b3b; --ink-3: #6b6256; --line: #e3d3a8;
   --neon: #39ff14; --neon-dark: #17b800; --neon-soft: #e4ffdc;
+  --ok-text: #0b6b00; /* verde para TEXTO sobre fondo claro (contraste AA 6.4:1); --neon-dark sólo para bordes y rellenos */
   --blue: #1e6bff; --blue-soft: #dce8ff;
   --ok: #17a34a; --warn: #f59e0b; --danger: #d62828; --info: #1e6bff;
 

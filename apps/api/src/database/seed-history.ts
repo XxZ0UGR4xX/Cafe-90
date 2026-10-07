@@ -23,6 +23,8 @@ export async function seedHistory(db: DbService, tenantId: string, days = 21, lo
     for (const b of branches) {
       const bw = waiters.filter((w) => w.branch_id === b.id).map((w) => w.id as string);
       const scale = b.code === 'CENTRO' ? 1 : b.code === 'NORTE' ? 0.75 : 0.55;
+      // Hora local actual de la sucursal: el día de hoy NO se llena con ventas «del futuro» (distorsionaban el dashboard y el orden de los pedidos)
+      const nowLocal = String((await q.query(`SELECT to_char(now() AT TIME ZONE $1, 'YYYY-MM-DD HH24:MI:SS') AS t`, [b.timezone])).rows[0].t);
       for (let d = days; d >= 0; d--) {
         const date = (await q.query(`SELECT ((now() AT TIME ZONE $2) - $1 * interval '1 day')::date AS d, EXTRACT(dow FROM ((now() AT TIME ZONE $2) - $1 * interval '1 day'))::int AS dow`, [d, b.timezone])).rows[0];
         const weekend = date.dow === 0 || date.dow === 5 || date.dow === 6;
@@ -31,6 +33,7 @@ export async function seedHistory(db: DbService, tenantId: string, days = 21, lo
         for (let k = 0; k < n; k++) {
           const hour = pick(r, HOURS); const minute = Math.floor(r() * 60);
           const ts = `${date.d.toISOString?.().slice(0, 10) ?? String(date.d).slice(0, 10)} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+          if (ts > nowLocal) continue;
           const lines: { p: (typeof products)[number]; qty: number }[] = [{ p: pick(r, burgers), qty: r() < 0.3 ? 2 : 1 }];
           if (r() < 0.7) lines.push({ p: pick(r, sides), qty: 1 }); if (r() < 0.85) lines.push({ p: pick(r, drinks), qty: r() < 0.3 ? 2 : 1 }); if (r() < 0.25) lines.push({ p: pick(r, sweets), qty: 1 });
           const subtotal = Math.round(lines.reduce((a, l) => a + l.p.price * l.qty, 0) * 100) / 100;

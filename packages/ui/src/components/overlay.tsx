@@ -1,24 +1,42 @@
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RetroButton, cx } from './core';
 
 // ───────────── RetroModal ─────────────
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 export function RetroModal({ open, title, onClose, children, footer, size = 'md', dismissible = true }: {
   open: boolean; title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: 'sm' | 'md' | 'lg'; dismissible?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  // `onClose` suele llegar como función en línea (cambia en cada render): se guarda en una ref para que el efecto dependa SÓLO de `open`.
+  // Antes el efecto se re-ejecutaba en cada tecla y devolvía el foco al primer campo: al teclear en el 2.º campo, el resto del texto caía en el 1.º.
+  const closeRef = useRef(onClose); closeRef.current = onClose;
+  const dismissRef = useRef(dismissible); dismissRef.current = dismissible;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    ref.current?.querySelector<HTMLElement>('input,select,textarea,button:not([data-close])')?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && dismissible) onClose(); };
+    const root = ref.current;
+    root?.querySelector<HTMLElement>('input,select,textarea,button:not([data-close])')?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && dismissRef.current) { e.stopPropagation(); closeRef.current(); return; }
+      if (e.key !== 'Tab' || !root) return;
+      // el foco no sale del diálogo: Tab en el último vuelve al primero y Mayús+Tab en el primero va al último
+      const items = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => { const st = getComputedStyle(el); return !el.hidden && st.display !== 'none' && st.visibility !== 'hidden'; });
+      if (!items.length) { e.preventDefault(); return; }
+      const first = items[0]!, last = items[items.length - 1]!, active = document.activeElement;
+      if (!root.contains(active)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey); prev?.focus?.(); };
-  }, [open, onClose, dismissible]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="rb-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && dismissible) onClose(); }}>
-      <div ref={ref} role="dialog" aria-modal="true" className={cx('rb-modal', size !== 'md' && `rb-modal--${size}`)}>
-        <header className="rb-modal__head"><h3>{title}</h3>{dismissible && <RetroButton data-close size="sm" variant="white" aria-label="Cerrar" onClick={onClose}>✕</RetroButton>}</header>
+      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} className={cx('rb-modal', size !== 'md' && `rb-modal--${size}`)}>
+        <header className="rb-modal__head"><h3 id={titleId}>{title}</h3>{dismissible && <RetroButton data-close size="sm" variant="white" aria-label="Cerrar" onClick={onClose}>✕</RetroButton>}</header>
         <div className="rb-modal__body">{children}</div>
         {footer && <footer className="rb-modal__foot">{footer}</footer>}
       </div>

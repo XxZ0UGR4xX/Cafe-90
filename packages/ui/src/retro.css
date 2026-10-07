@@ -91,7 +91,7 @@ button { font-family: inherit; }
 .rb-stat::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 8px; background: var(--accent, var(--ketchup)); border-bottom: 2px solid var(--ink); }
 .rb-stat__label { margin-top: 8px; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
 .rb-stat__value { font-family: var(--font-display); font-size: clamp(1.4rem, 2.6vw, 2rem); line-height: 1.1; word-break: break-word; }
-.rb-stat__delta { font-size: .78rem; font-weight: 800; } .rb-stat__delta--up { color: var(--neon-dark); } .rb-stat__delta--down { color: var(--ketchup); }
+.rb-stat__delta { font-size: .78rem; font-weight: 800; } .rb-stat__delta--up { color: var(--ok-text); } .rb-stat__delta--down { color: var(--ketchup); }
 .rb-stat__icon { position: absolute; right: 10px; top: 18px; font-size: 1.8rem; opacity: .9; }
 
 /* Layout app */
