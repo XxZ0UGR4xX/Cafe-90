@@ -93,7 +93,7 @@ function Taxes() {
     <FormModal open={!!f} onClose={() => setF(null)} title="Nuevo impuesto" size="sm" busy={save.isPending} disabled={!f?.name} onSubmit={() => save.mutate()}>{f && <><RetroInput label="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /><RetroInput label="Tasa %" inputMode="decimal" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} /><RetroCheck label="Incluido en el precio" checked={f.included ?? true} onChange={(e) => setF({ ...f, included: e.target.checked })} /><RetroCheck label="Predeterminado" checked={f.isDefault ?? false} onChange={(e) => setF({ ...f, isDefault: e.target.checked })} /></>}</FormModal></>;
 }
 
-const POLICIES: { key: string; label: string; hint: string; type: 'number' | 'bool'; def: any }[] = [
+const POLICIES: { key: string; label: string; hint: string; type: 'number' | 'bool' | 'text'; def: any }[] = [
   { key: 'sales.discountThresholdPct', label: 'Descuento máximo sin autorización (%)', hint: 'Por encima se pide PIN de gerente', type: 'number', def: 10 },
   { key: 'cash.tolerance', label: 'Tolerancia de diferencia en corte ($)', hint: 'Mayor requiere comentario y autorización', type: 'number', def: 50 },
   { key: 'cash.expenseLimit', label: 'Gasto de caja sin autorización ($)', hint: 'Los retiros siempre requieren autorización', type: 'number', def: 500 },
@@ -101,6 +101,7 @@ const POLICIES: { key: string; label: string; hint: string; type: 'number' | 'bo
   { key: 'inventory.allowNegativeSales', label: 'Permitir vender sin existencia', hint: 'Si está apagado, se bloquea el envío a cocina sin stock', type: 'bool', def: false },
   { key: 'qr.autoSend', label: 'Pedidos por QR directo a cocina', hint: 'Apagado: el mesero confirma cada pedido', type: 'bool', def: false },
   { key: 'delivery.fee', label: 'Cargo de envío predeterminado ($)', hint: 'Para pedidos en línea a domicilio', type: 'number', def: 30 },
+  { key: 'notifications.emailTo', label: 'Correos para alertas críticas', hint: 'Separados por coma: reciben por correo las alertas críticas (inventario descuadrado, etc.)', type: 'text', def: '' },
   { key: 'kitchen.slaWarnMin', label: 'KDS: alerta amarilla (min)', hint: 'Ticket cambia a amarillo', type: 'number', def: 5 },
   { key: 'kitchen.slaLateMin', label: 'KDS: alerta roja (min)', hint: 'Ticket retrasado', type: 'number', def: 10 },
 ];
@@ -111,7 +112,7 @@ function Policies() {
   const w = can('tenancy.settings.write');
   return <Async q={q}><RetroCard title="📐 Reglas de operación"><div className="rb-col"><RetroSelect aria-label="Alcance" value={scope} onChange={(e) => setScope(e.target.value as any)} options={[{ value: 'global', label: 'Aplicar a todo el restaurante' }, { value: 'branch', label: 'Solo a la sucursal activa (sobrescribe)' }]} />
     {POLICIES.map((p) => { const v = q.data?.[p.key] ?? p.def; return <div key={p.key} className="rb-row rb-wrap" style={{ borderBottom: '2px dashed var(--line)', paddingBottom: 8 }}><div className="rb-grow"><strong>{p.label}</strong><div className="rb-hint">{p.hint}</div></div>
-      {p.type === 'bool' ? <RetroCheck label={v ? 'Sí' : 'No'} checked={!!v} disabled={!w} onChange={(e) => save.mutate({ key: p.key, value: e.target.checked })} /> : <input key={String(v)} className="rb-input" style={{ width: 130 }} inputMode="decimal" defaultValue={v} disabled={!w} onBlur={(e) => { if (e.target.value !== String(v) && e.target.value !== '') save.mutate({ key: p.key, value: num(e.target.value) }); }} />}</div>; })}</div></RetroCard></Async>;
+      {p.type === 'text' ? <input key={String(v)} className="rb-input" style={{ width: 260 }} type="text" defaultValue={Array.isArray(v) ? v.join(', ') : v} disabled={!w} onBlur={(e) => { if (e.target.value !== String(v)) save.mutate({ key: p.key, value: e.target.value.trim() }); }} /> : p.type === 'bool' ? <RetroCheck label={v ? 'Sí' : 'No'} checked={!!v} disabled={!w} onChange={(e) => save.mutate({ key: p.key, value: e.target.checked })} /> : <input key={String(v)} className="rb-input" style={{ width: 130 }} inputMode="decimal" defaultValue={v} disabled={!w} onBlur={(e) => { if (e.target.value !== String(v) && e.target.value !== '') save.mutate({ key: p.key, value: num(e.target.value) }); }} />}</div>; })}</div></RetroCard></Async>;
 }
 
 function Kitchen() {
@@ -153,5 +154,14 @@ function Sync() {
 }
 
 function Integrations() {
-  return <RetroCard title="🔌 Integraciones"><div className="rb-col">{[['Facturación fiscal', 'Interfaz FiscalProvider lista; requiere definir país/PAC.'], ['Pasarela de pagos / terminal', 'Interfaz PaymentGateway lista; hoy se registra método y referencia.'], ['Impresión térmica', 'Cola de impresión activa; instala el agente local ESC/POS.'], ['SMS / correo', 'Notificaciones in-app activas; canales externos por adaptador.'], ['Delivery de terceros', 'Pedidos externos entran por la API pública / sincronización.']].map(([t, d]) => <div key={t} className="rb-row"><strong>{t}</strong><span className="rb-muted rb-grow">{d}</span><RetroBadge tone="warn">Pendiente</RetroBadge></div>)}</div></RetroCard>;
+  const { can } = useSession(); const st = useGet<{ transport: string }>(['mail', 'status'], '/mail/status', undefined, { enabled: can('tenancy.settings.read') });
+  const ob = useGet<any[]>(['mail', 'outbox'], '/mail/outbox', { limit: 15 }, { enabled: can('tenancy.settings.read') });
+  const [to, setTo] = useState('');
+  const test = useAct(() => post('/mail/test', { to }), { invalidate: [['mail']], ok: 'Correo de prueba procesado' });
+  const real = st.data?.transport === 'smtp';
+  return <><RetroCard title="🔌 Integraciones"><div className="rb-col">{[['Facturación fiscal (CFDI)', 'Flujo completo con proveedor simulado; conecta un PAC real (docs/FISCAL.md).'], ['Pasarela de pagos / terminal', 'Hoy se registra método y referencia; sin cobro en línea.'], ['Impresión térmica', 'Cola activa; instala el agente local ESC/POS (apps/print-agent).'], ['SMS / push', 'No disponibles aún; notificaciones in-app y correo.'], ['Delivery de terceros', 'Pedidos externos entran por la API pública / sincronización.']].map(([t, d]) => <div key={t} className="rb-row"><strong>{t}</strong><span className="rb-muted rb-grow">{d}</span></div>)}</div></RetroCard>
+    {can('tenancy.settings.read') && <RetroCard title="✉️ Correo saliente" tone="plain"><div className="rb-col">
+      <div className="rb-row rb-wrap"><RetroBadge tone={real ? 'ok' : 'orange'}>{real ? 'SMTP configurado' : 'Modo registro (sin SMTP_URL): no sale correo real'}</RetroBadge></div>
+      <div className="rb-row rb-wrap"><div className="rb-grow"><RetroInput label="Enviar correo de prueba a" type="email" value={to} onChange={(e) => setTo(e.target.value)} /></div>{can('tenancy.settings.write') && <RetroButton variant="neon" loading={test.isPending} disabled={!to.includes('@')} onClick={() => test.mutate()}>Enviar prueba</RetroButton>}</div>
+      <Async q={ob}><RetroTable rows={ob.data ?? []} empty="Sin correos todavía" columns={[{ key: 'a', header: 'Fecha', render: (r: any) => fmtDate(r.createdAt) }, { key: 'k', header: 'Tipo', render: (r: any) => r.kind }, { key: 't', header: 'Para', render: (r: any) => r.to.join(', ') }, { key: 's', header: 'Asunto', render: (r: any) => r.subject }, { key: 'e', header: 'Estado', render: (r: any) => <><RetroBadge tone={r.status === 'SENT' ? 'ok' : r.status === 'FAILED' ? 'danger' : 'warn'}>{r.status}</RetroBadge>{r.lastError && <div className="rb-hint">{r.lastError}</div>}</> }]} /></Async></div></RetroCard>}</>;
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DbService, Tx } from '../../database/db.service';
 import { ctx } from '../../common/request-context';
+import { MailService } from '../mail/mail.service';
 
 export interface NotificationInput {
   type: string; severity?: 'INFO' | 'WARNING' | 'CRITICAL'; title: string; body?: string;
@@ -9,7 +10,7 @@ export interface NotificationInput {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly db: DbService) {}
+  constructor(private readonly db: DbService, private readonly mail: MailService) {}
 
   /** Inserta una notificación dentro de la transacción actual; `dedupeKey` evita duplicados. */
   async emit(q: Tx, n: NotificationInput): Promise<void> {
@@ -18,6 +19,13 @@ export class NotificationsService {
        VALUES (app_tenant_id(), $1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
       [n.branchId ?? null, n.type, n.severity ?? 'INFO', n.title, n.body ?? null,
         n.payload === undefined ? null : JSON.stringify(n.payload), n.dedupeKey ?? null]);
+    // Alertas CRÍTICAS también por correo a los destinatarios configurados (Configuración → Reglas: notifications.emailTo)
+    if (n.severity === 'CRITICAL') {
+      const raw = (await q.query(`SELECT value FROM settings WHERE key = 'notifications.emailTo' AND branch_id IS NULL`)).rows[0]?.value;
+      const to = (Array.isArray(raw) ? raw : String(raw ?? '').split(/[,;\s]+/)).map(String).filter(Boolean);
+      if (to.length) await this.mail.enqueue(q, { to, subject: `🚨 ${n.title}`, text: `${n.title}\n${n.body ?? ''}`, kind: 'ALERT',
+        html: MailService.html(n.title, [n.body ?? 'Revisa el sistema.']), dedupeKey: n.dedupeKey ? `notif:${n.dedupeKey}` : undefined });
+    }
   }
 
   list(opts: { branchId?: string; unreadOnly: boolean; limit: number }) {

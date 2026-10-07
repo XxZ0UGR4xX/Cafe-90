@@ -5,6 +5,7 @@ import { AppError, forbidden, notFound } from '../../common/errors';
 import { ctx } from '../../common/request-context';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../tenancy/settings.service';
+import { MailService } from '../mail/mail.service';
 import { computeTotals } from '../sales/pricing';
 import { amountToCents, centsToAmount } from '../sales/pricing';
 import {
@@ -30,7 +31,7 @@ export const cfdiDate = (tz: string, at = new Date()) => at.toLocaleString('sv-S
 @Injectable()
 export class FiscalService {
   constructor(
-    private readonly db: DbService, private readonly audit: AuditService, private readonly settings: SettingsService,
+    private readonly db: DbService, private readonly audit: AuditService, private readonly settings: SettingsService, private readonly mail: MailService,
     @Inject(FISCAL_PROVIDER) private readonly provider: FiscalProvider | null, @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -178,6 +179,7 @@ export class FiscalService {
         const inv = (await q.query('SELECT branch_id, series, folio, total FROM invoices WHERE id=$1', [invoiceId])).rows[0];
         await this.audit.record(q, { action: 'invoice.stamp', entity: 'invoice', entityId: invoiceId, branchId: inv.branch_id,
           newValue: { uuid: r.uuid, folio: `${inv.series}-${inv.folio}`, total: inv.total, simulated: provider.simulated } });
+        await this.queueInvoiceEmail(q, invoiceId);
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message.slice(0, 500) : 'Error desconocido';
@@ -188,6 +190,36 @@ export class FiscalService {
       throw new AppError('FISCAL_PROVIDER_ERROR', 502, { reason: msg }, true);
     }
     return this.get(invoiceId, true);
+  }
+
+  /** Encola el correo con el XML al receptor (si dejó correo). Idempotente por factura. */
+  private async queueInvoiceEmail(q: Tx, invoiceId: string, to?: string) {
+    const i = (await q.query(`SELECT i.series, i.folio, i.uuid_sat, i.xml, i.total, i.simulated, i.kind, i.receptor_name, i.receptor_email, r.name AS restaurant
+        FROM invoices i JOIN restaurants r ON r.id = i.tenant_id WHERE i.id=$1`, [invoiceId])).rows[0];
+    const dest = to ?? i?.receptor_email;
+    if (!i?.xml || !dest) return false;
+    const folio = `${i.series}-${i.folio}`;
+    const lines = [`Hola ${i.receptor_name}, adjuntamos tu factura ${folio} por $${Number(i.total).toFixed(2)}.`, `Folio fiscal (UUID): ${i.uuid_sat}`,
+      ...(i.simulated ? ['⚠️ Factura de PRUEBA: no tiene validez fiscal.'] : []), `Gracias por tu visita a ${i.restaurant}.`];
+    return this.mail.enqueue(q, { to: dest, kind: 'INVOICE', subject: `${i.simulated ? '[PRUEBA] ' : ''}Tu factura ${folio} · ${i.restaurant}`, text: lines.join('\n'),
+      html: MailService.html(`Factura ${folio}`, lines), attachments: [{ filename: `CFDI-${folio}-${String(i.uuid_sat).slice(0, 8)}.xml`, contentType: 'application/xml', content: i.xml }],
+      dedupeKey: to ? undefined : `invoice:${invoiceId}` });
+  }
+
+  /** Reenvía el XML (a otro correo si hace falta). */
+  async emailInvoice(id: string, to?: string) {
+    const scope = ctx().principal!.branchScope('fiscal.invoice.issue');
+    return this.db.tx(async (q) => {
+      const i = (await q.query(`SELECT id, branch_id, status, receptor_email FROM invoices WHERE id=$1 AND ($2::uuid[] IS NULL OR branch_id = ANY($2::uuid[]))`, [id, scope])).rows[0];
+      if (!i) throw notFound('invoice');
+      if (!['STAMPED', 'CANCEL_PENDING'].includes(i.status)) throw new AppError('CONFLICT', 409, undefined, false, '🧾 Sólo se envían facturas timbradas.');
+      const dest = to ?? i.receptor_email;
+      if (!dest) throw new AppError('VALIDATION_ERROR', 400, { field: 'to' }, false, '🧾 Indica a qué correo enviar la factura.');
+      const queued = await this.queueInvoiceEmail(q, id, dest);
+      if (!queued) throw new AppError('VALIDATION_ERROR', 400, { field: 'to' }, false, '🧾 El correo no es válido.');
+      await this.audit.record(q, { action: 'invoice.email', entity: 'invoice', entityId: id, branchId: i.branch_id, newValue: { to: dest } });
+      return { queued: true };
+    });
   }
 
   // ───────────────────────── emisión por orden ─────────────────────────

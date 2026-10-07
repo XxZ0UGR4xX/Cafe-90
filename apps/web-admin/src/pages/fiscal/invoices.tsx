@@ -32,7 +32,8 @@ export function InvoiceOrderDialog({ order, onClose, onDone }: { order: { id: st
 
 export function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useGet<any>(['invoices', 'one', id], `/invoices/${id}`); const { can } = useSession(); const cat = useFiscalCatalogs();
-  const [cancel, setCancel] = useState<{ motive: string; replacementUuid: string } | null>(null);
+  const [cancel, setCancel] = useState<{ motive: string; replacementUuid: string } | null>(null); const [mailTo, setMailTo] = useState<string | null>(null);
+  const sendMail = useAct(() => post(`/invoices/${id}/email`, { to: mailTo || undefined }), { ok: '✉️ Factura en cola de envío', onSuccess: () => setMailTo(null) });
   const i = q.data;
   const doCancel = useAct(() => post(`/invoices/${id}/cancel`, { motive: cancel!.motive, replacementUuid: cancel!.replacementUuid || undefined }), { invalidate: [['invoices'], ['orders']], ok: 'Cancelación registrada', onSuccess: () => setCancel(null) });
   const retry = useAct(() => post(`/invoices/${id}/retry`), { invalidate: [['invoices']], ok: '🧾 Factura timbrada' });
@@ -40,6 +41,7 @@ export function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void
   return <RetroModal open onClose={onClose} size="lg" title={i ? `Factura ${folioOf(i)}` : 'Factura'} footer={i && <>
     {i.xml !== null && i.uuid && <RetroButton variant="white" loading={xml.isPending} onClick={() => xml.mutate()}>⬇️ XML</RetroButton>}
     {i.uuid && <RetroButton variant="white" onClick={() => window.print()}>🖨️ Imprimir</RetroButton>}
+    {i.xml !== null && i.uuid && can('fiscal.invoice.issue', i.branchId) && <RetroButton variant="white" onClick={() => setMailTo(i.receptorEmail ?? '')}>✉️ Enviar</RetroButton>}
     {['ERROR', 'PENDING'].includes(i.status) && can('fiscal.invoice.issue', i.branchId) && <RetroButton variant="mustard" loading={retry.isPending} onClick={() => retry.mutate()}>↻ Reintentar timbrado</RetroButton>}
     {i.status === 'STAMPED' && can('fiscal.invoice.cancel', i.branchId) && <RetroButton variant="ink" onClick={() => setCancel({ motive: '02', replacementUuid: '' })}>Cancelar factura</RetroButton>}</>}>
     <Async q={q}>{i && <div className="rb-col rb-print-area">
@@ -55,6 +57,7 @@ export function InvoiceDetail({ id, onClose }: { id: string; onClose: () => void
       <div className="rb-row" style={{ justifyContent: 'flex-end', gap: 24 }}><div>Subtotal<br /><strong className="rb-mono">{formatMoney2(i.subtotal)}</strong></div>{i.discount > 0 && <div>Descuento<br /><strong className="rb-mono">−{formatMoney2(i.discount)}</strong></div>}<div>IVA<br /><strong className="rb-mono">{formatMoney2(i.tax)}</strong></div><div>TOTAL<br /><strong className="rb-display" style={{ fontSize: '1.4rem' }}>{formatMoney2(i.total)}</strong></div></div>
       {i.cancelMotive && <div className="rb-error-text">Cancelación · motivo {i.cancelMotive} {cat.data?.motivosCancelacion[i.cancelMotive] ?? ''}</div>}
     </div>}</Async>
+    <FormModal open={mailTo !== null} onClose={() => setMailTo(null)} size="sm" title="Enviar factura por correo" submitLabel="Enviar XML" busy={sendMail.isPending} disabled={!mailTo?.includes('@')} onSubmit={() => sendMail.mutate()}><RetroInput label="Correo del destinatario" type="email" value={mailTo ?? ''} onChange={(e) => setMailTo(e.target.value)} autoFocus /><span className="rb-hint">Se envía el XML adjunto.</span></FormModal>
     <FormModal open={!!cancel} onClose={() => setCancel(null)} size="sm" title="Cancelar factura" submitLabel="Cancelar ante el SAT" busy={doCancel.isPending} disabled={!cancel || (cancel.motive === '01' && !/^[0-9a-f-]{36}$/i.test(cancel.replacementUuid))} onSubmit={() => doCancel.mutate()}>{cancel && <>
       <RetroSelect label="Motivo de cancelación" value={cancel.motive} onChange={(e) => setCancel({ ...cancel, motive: e.target.value })} options={Object.entries(cat.data?.motivosCancelacion ?? {}).map(([k, v]) => ({ value: k, label: `${k} · ${v}` }))} />
       {cancel.motive === '01' && <RetroInput label="UUID del comprobante que sustituye" value={cancel.replacementUuid} onChange={(e) => setCancel({ ...cancel, replacementUuid: e.target.value.trim() })} />}

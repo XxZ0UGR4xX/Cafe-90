@@ -3,13 +3,15 @@ import { ENV, type Env } from '../../config/env';
 import { DbService } from '../../database/db.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReconciliationService } from '../inventory/reconciliation.service';
+import { MailService } from '../mail/mail.service';
+import { requestContext } from '../../common/request-context';
 
 /** Tareas periódicas por tenant: alertas de reservación, corte pendiente, pedidos retrasados y caducidades. */
 @Injectable()
 export class JobsService implements OnModuleInit, OnApplicationShutdown {
   private timer?: NodeJS.Timeout;
   private readonly log = new Logger('Jobs');
-  constructor(private readonly db: DbService, private readonly notifications: NotificationsService, private readonly recon: ReconciliationService, @Inject(ENV) private readonly env: Env) {}
+  constructor(private readonly db: DbService, private readonly notifications: NotificationsService, private readonly recon: ReconciliationService, private readonly mail: MailService, @Inject(ENV) private readonly env: Env) {}
 
   onModuleInit() {
     if (this.env.JOBS_ENABLED === 'true' && this.env.NODE_ENV !== 'test') {
@@ -24,6 +26,8 @@ export class JobsService implements OnModuleInit, OnApplicationShutdown {
     let n = 0;
     for (const t of tenants) {
       n += await this.db.tx((q) => this.forTenant(q), t);
+      // correo saliente: fuera de transacción (la llamada SMTP no debe retener bloqueos)
+      await requestContext.run({ tenantId: t }, () => this.mail.flush()).catch((e) => this.log.error(e));
       // conciliación nocturna (≈ 03:00 hora de México = 09:00 UTC); una vez por día y tenant aunque haya varias instancias
       if (new Date().getUTCHours() === 9) await this.nightly(t).catch((e) => this.log.error(e));
     }
