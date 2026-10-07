@@ -13,6 +13,7 @@ import { createLogger, PinoNestLogger } from './common/logger';
 import { requestContext } from './common/request-context';
 import { loadEnv } from './config/env';
 import { MetricsService } from './modules/metrics/metrics.service';
+import { REDIS, type RedisClient } from './infra/redis.module';
 
 export async function createApp(): Promise<NestFastifyApplication> {
   const env = loadEnv();
@@ -52,7 +53,9 @@ export async function createApp(): Promise<NestFastifyApplication> {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   await app.register(fastifyCookie as any);
-  await app.register(fastifyRateLimit as any, { max: env.RATE_LIMIT_MAX, timeWindow: '1 minute' });
+  // Con Redis el límite global se comparte entre réplicas; si Redis cae, no se bloquea el tráfico (skipOnError)
+  const redis = app.get<RedisClient>(REDIS);
+  await app.register(fastifyRateLimit as any, { max: env.RATE_LIMIT_MAX, timeWindow: '1 minute', ...(redis ? { redis, nameSpace: 'rl:global:', skipOnError: true } : {}) });
 
   if (env.NODE_ENV !== 'production') {
     const doc = SwaggerModule.createDocument(app, new DocumentBuilder()

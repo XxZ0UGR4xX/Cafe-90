@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { OrderItemInputDto, PublicInvoiceDto, PublicInvoiceLookupDto, ReservationDto } from '@retroburger/shared';
 import { ENV, type Env } from '../../config/env';
 import { AppError } from '../../common/errors';
-import { RateLimiter } from '../../common/rate-limiter';
+import { type RateLimiter, createRateLimiter } from '../../common/rate-limiter';
+import { REDIS, type RedisClient } from '../../infra/redis.module';
 import { Public } from '../identity/access.decorators';
 import { FiscalService } from '../fiscal/fiscal.service';
 import { PublicService } from './public.service';
@@ -31,11 +32,11 @@ class LoyaltyQuery extends createZodDto(z.object({ phone: z.string().min(7).max(
 @Injectable()
 class PublicGuard implements CanActivate {
   private readonly limiter: RateLimiter;
-  constructor(private readonly svc: PublicService, @Inject(ENV) env: Env) { this.limiter = new RateLimiter(env.PUBLIC_RATE_LIMIT_MAX, 60_000); }
+  constructor(private readonly svc: PublicService, @Inject(ENV) env: Env, @Inject(REDIS) redis: RedisClient) { this.limiter = createRateLimiter(redis, env.PUBLIC_RATE_LIMIT_MAX, 60_000, 'public'); }
   async canActivate(c: ExecutionContext) {
     const req = c.switchToHttp().getRequest<FastifyRequest>();
     const writes = req.method !== 'GET';
-    if (writes && this.limiter.hit(`${req.ip}`)) throw new AppError('RATE_LIMITED', 429, undefined, true);
+    if (writes && (await this.limiter.hit(`${req.ip}`))) throw new AppError('RATE_LIMITED', 429, undefined, true);
     await this.svc.enter((req.params as { slug: string }).slug);
     return true;
   }

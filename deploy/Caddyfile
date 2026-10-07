@@ -12,10 +12,16 @@
 	# Las métricas son sólo para Prometheus (red interna): nunca por Internet
 	respond /metrics 404
 	# Socket.IO (/ws) usa WebSocket: reverse_proxy lo maneja sin configuración extra
-	reverse_proxy api:3000 {
+	# `dynamic a` re-resuelve el DNS de Docker: ve todas las réplicas de la API (docker compose up --scale api=N / API_REPLICAS)
+	reverse_proxy {
+		dynamic a api 3000 {
+			refresh 5s
+		}
+		lb_policy round_robin
 		header_up X-Forwarded-For {remote_host}
 		health_uri /ready
-		health_interval 15s
+		health_interval 10s
+		fail_duration 30s
 	}
 	# HSTS y demás cabeceras de seguridad de la API las agrega helmet (no duplicar aquí)
 }

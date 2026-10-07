@@ -11,7 +11,7 @@ Internet ─► Caddy :80/:443 (TLS automático)
               └─ api.tu-dominio.com   ─► api (NestJS, usuario no-root, healthcheck /ready)
                                             └─► db (PostgreSQL 16, red interna: sin puertos publicados)
 ```
-La API es **una sola instancia**: el rate-limit, el WebSocket y los jobs viven en memoria (ver «Escalar»).
+La API puede correr en **varias réplicas** (con Redis, ver «Escalar»); por defecto es una.
 
 ## Primer despliegue
 1. Servidor con Docker + Compose v2, DNS de los tres nombres apuntando a él y puertos 80/443 abiertos.
@@ -50,11 +50,13 @@ Guarda la clave privada de age **fuera** del servidor y copia los respaldos a ot
 Ya: usuario no-root, red de BD interna, TLS/HSTS, CSP + cabeceras en las webs, cookies `Secure`/`SameSite=Strict`, 2FA obligatorio para administradores, RLS forzada, sandbox fiscal prohibido en producción (la API no arranca), auditoría de dependencias semanal y en cada cambio de lockfile (`.github/workflows/security.yml`).
 Pendiente antes de producción comercial: gestión de secretos (hoy en `.env.prod`: usar Docker/Swarm secrets o un gestor), rotación de `JWT_ACCESS_SECRET`/`MFA_ENCRYPTION_KEY`, WAF/rate-limit en el borde, escaneo de imágenes (Trivy) y firma, pentest, monitoreo/alertas (sólo hay logs JSON y `/ready`).
 
-## Escalar
-Una instancia aguanta una operación de varias sucursales, pero para réplicas de API hace falta **Redis** (rate-limit compartido, pub/sub de Socket.IO, jobs con elección de líder) y, para reportes pesados, una réplica de lectura o tablas resumen. Hasta entonces: **no** pongas `replicas > 1`.
+## Escalar (varias réplicas de la API)
+Redis (incluido en el compose, opcional en desarrollo) comparte entre réplicas lo que antes vivía en memoria: **rate-limit** (login, público y global) y **WebSocket** (adaptador Socket.IO: un evento originado en la réplica A llega a los sockets de la B). Para subir réplicas: `API_REPLICAS=2` en `.env.prod` y `docker compose … up -d`; Caddy re-resuelve el DNS de Docker y reparte con *round robin* y chequeo `/ready`.
+Verificado: 2 réplicas tras Caddy reciben tráfico por igual; 13 logins fallidos seguidos → 10 × 401 y luego 429 (límite compartido); prueba automática de evento entre instancias. Las tareas periódicas corren en cada réplica pero son idempotentes (llave de deduplicación, `job_runs`, reclamo `SKIP LOCKED` del correo).
+Si Redis cae la API **sigue sirviendo** (fail-open: el límite por IP se relaja; el bloqueo por cuenta vive en PostgreSQL y el WebSocket queda por instancia) y `/ready` lo informa (`redis: down`). Para reportes pesados, siguiente paso: réplica de lectura o tablas resumen.
 
 ## Pendiente
-Prueba en un servidor real con dominio y carga; despliegue automático (CD) y *rollback* automatizado; observabilidad (métricas/trazas); Redis; endurecimiento anterior.
+Prueba en un servidor real con dominio y carga; despliegue automático (CD) y *rollback* automatizado; trazas distribuidas; endurecimiento anterior.
 
 ## Monitoreo
 La API expone `GET /metrics` (formato Prometheus) **sólo si defines `METRICS_TOKEN`** (≥16 caracteres, Bearer). El proxy responde 404 a `/metrics` desde Internet; Prometheus lo consulta por la red interna.

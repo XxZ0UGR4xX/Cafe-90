@@ -27,9 +27,17 @@ services:
     depends_on: { db: { condition: service_healthy } }
     networks: [internal]
 
+  redis:                           # rate-limit y WebSocket compartidos entre réplicas de la API (sin persistencia: es sólo estado efímero)
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 10 }
+    networks: [internal]
+
   api:
     image: retroburger-api:${APP_VERSION:-latest}
     restart: unless-stopped
+    deploy: { replicas: "${API_REPLICAS:-1}" }
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://retroburger_app:${DB_APP_PASSWORD}@db:5432/retroburger
@@ -43,9 +51,11 @@ services:
       MAIL_FROM: ${MAIL_FROM:-RetroBurger <no-reply@localhost>}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      REDIS_URL: redis://redis:6379
     depends_on:
       db: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
     networks: [internal, edge]
 
   web-admin:

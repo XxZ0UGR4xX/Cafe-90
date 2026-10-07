@@ -5,7 +5,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ChangePasswordDto, LoginDto, MfaCodeDto, MfaDisableDto, MfaEnrollFinishDto, MfaEnrollStartDto, MfaVerifyDto, PinLoginDto } from '@retroburger/shared';
 import { ENV, type Env } from '../../config/env';
 import { AppError, unauthenticated } from '../../common/errors';
-import { RateLimiter } from '../../common/rate-limiter';
+import { type RateLimiter, createRateLimiter } from '../../common/rate-limiter';
+import { REDIS, type RedisClient } from '../../infra/redis.module';
 import { Authenticated, Public } from './access.decorators';
 import { AuthService, type Session } from './auth.service';
 import { MfaService } from './mfa.service';
@@ -26,11 +27,11 @@ const COOKIE = 'rb_refresh';
 @Injectable()
 export class LoginRateLimitGuard implements CanActivate {
   private readonly limiter: RateLimiter;
-  constructor(@Inject(ENV) env: Env) { this.limiter = new RateLimiter(env.LOGIN_RATE_LIMIT_MAX, 60_000); }
-  canActivate(c: ExecutionContext): boolean {
+  constructor(@Inject(ENV) env: Env, @Inject(REDIS) redis: RedisClient) { this.limiter = createRateLimiter(redis, env.LOGIN_RATE_LIMIT_MAX, 60_000, 'login'); }
+  async canActivate(c: ExecutionContext): Promise<boolean> {
     const req = c.switchToHttp().getRequest<FastifyRequest>();
     const b = (req.body ?? {}) as Record<string, string>;
-    if (this.limiter.hit(`${req.ip}|${b.tenant}|${b.email ?? b.userCode ?? b.mfaToken?.slice(-24)}`)) throw new AppError('RATE_LIMITED', 429, undefined, true);
+    if (await this.limiter.hit(`${req.ip}|${b.tenant}|${b.email ?? b.userCode ?? b.mfaToken?.slice(-24)}`)) throw new AppError('RATE_LIMITED', 429, undefined, true);
     return true;
   }
 }

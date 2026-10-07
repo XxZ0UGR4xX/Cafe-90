@@ -1,5 +1,7 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { OnGatewayConnection, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { OnGatewayConnection, OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { REDIS, type RedisClient } from '../../infra/redis.module';
 import type { Server, Socket } from 'socket.io';
 import { ENV, type Env } from '../../config/env';
 import { DomainEvent, DomainEvents } from '../../common/domain-events';
@@ -18,10 +20,15 @@ export const roomOf = (tenantId: string, branchId: string) => `t:${tenantId}:b:$
  */
 @Injectable()
 @WebSocketGateway({ cors: { origin: true, credentials: true }, path: '/ws' })
-export class RealtimeGateway implements OnGatewayConnection, OnModuleInit {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayInit, OnModuleInit {
   @WebSocketServer() server!: Server;
 
-  constructor(private readonly events: DomainEvents, private readonly principals: PrincipalRepository, @Inject(ENV) private readonly env: Env) {}
+  constructor(private readonly events: DomainEvents, private readonly principals: PrincipalRepository, @Inject(ENV) private readonly env: Env, @Inject(REDIS) private readonly redis: RedisClient) {}
+
+  /** Con Redis, las salas y emisiones cruzan réplicas: un evento originado en la instancia A llega a los sockets conectados a la B. */
+  afterInit(server: Server) {
+    if (this.redis) server.adapter(createAdapter(this.redis.duplicate(), this.redis.duplicate()));
+  }
 
   onModuleInit() {
     this.events.onCommitted((e: DomainEvent) => {

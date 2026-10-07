@@ -9,7 +9,7 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Acceso a datos | Drizzle | `pg` con SQL parametrizado en repositorios/servicios | control directo de RLS/transacciones/bloqueos; menos capas. Migrar a un query builder tipado es posible sin cambiar contratos |
 | Sitio público | Next.js (SSR) | **Vite SPA** (`apps/web-public`) | acelerar entrega; **pendiente** SSR/SEO (migración a Next.js recomendada antes de producción comercial) |
 | Storybook | sí | no; los componentes se prueban con Vitest y el uso real en las apps | pendiente |
-| Redis/BullMQ | cache, pub/sub, colas | no se usa aún: jobs en proceso (`JobsService`), WebSocket en memoria, rate-limit en memoria | suficiente para 1 instancia; **requerido** para escalar horizontalmente |
+| Redis/BullMQ | cache, pub/sub, colas | **Redis opcional** (`REDIS_URL`): rate-limit y adaptador Socket.IO compartidos entre réplicas (fail-open). Jobs siguen en proceso pero idempotentes y seguros con varias réplicas; sin BullMQ ni caché | suficiente para varias réplicas de la API; BullMQ sólo hará falta si aparecen trabajos pesados |
 | Descuento de inventario | al enviar a cocina | al enviar a cocina (D13 recomendada) | configurable en un solo punto |
 
 ## Módulos
@@ -38,4 +38,4 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | CI/CD, Docker, despliegue | 🟡 | **Imágenes de producción** (API no-root con healthcheck; webs en nginx con CSP) construidas y probadas; **stack completo** `deploy/docker-compose.prod.yml` (BD interna, migración previa, Caddy con TLS) levantado y verificado (login, 2FA obligatorio, webs); alta de restaurante sin demo (`provision`); **respaldo cifrado + restauración + verificación** probados (descubierto y resuelto: con RLS forzada el respaldo exige un rol BYPASSRLS); CI construye las imágenes; auditoría de dependencias semanal (0 vulnerabilidades tras subir fastify/react-router). Falta CD, prueba en servidor real y monitoreo — ver `docs/DEPLOY.md` |
 
 ## Seguridad pendiente antes de producción
-**Activar `MFA_ENFORCE=true` y definir `MFA_ENCRYPTION_KEY` (obligatoria en producción)**; rotación de la clave MFA (hoy no hay re-cifrado), Redis para rate-limit/sesiones distribuidas, rotación de secretos, CSP/headers del frontend servidos por el proxy, gestión de secretos fuera de `.env`, escaneo de imágenes, monitoreo/alertas, pentest.
+**Activar `MFA_ENFORCE=true` y definir `MFA_ENCRYPTION_KEY` (obligatoria en producción)**; rotación de la clave MFA (hoy no hay re-cifrado), rotación de secretos, CSP/headers del frontend servidos por el proxy, gestión de secretos fuera de `.env`, escaneo de imágenes, monitoreo/alertas, pentest.
