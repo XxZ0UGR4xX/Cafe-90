@@ -18,15 +18,24 @@ La API puede correr en **varias réplicas** (con Redis, ver «Escalar»); por de
 2. `cp deploy/.env.prod.example deploy/.env.prod` y completa **todo** (secretos con `openssl rand -base64 48`). `MFA_ENFORCE=true` deja a ADMIN/SUPER_ADMIN sin acceso hasta que enrolen 2FA (lo hacen en su primer login).
 3. `docker compose --env-file deploy/.env.prod -f deploy/docker-compose.prod.yml up -d --build`
    (la BD crea los roles `retroburger_owner`, `retroburger_app` —sin BYPASSRLS— y `retroburger_backup` la primera vez; `migrate` aplica el esquema y termina; la API arranca sólo si migró bien).
-4. Crea el primer restaurante (sin datos de demostración):
+4. Crea el primer restaurante (sin datos de demostración). La contraseña **no** se pasa en la línea de comandos (quedaría en el historial del shell y en `docker inspect`): se lee sin eco y viaja por una variable exportada solo para ese comando.
    ```bash
+   read -rs -p 'Contraseña del dueño (≥12 caracteres): ' PROVISION_ADMIN_PASSWORD; echo; export PROVISION_ADMIN_PASSWORD
    docker compose --env-file deploy/.env.prod -f deploy/docker-compose.prod.yml run --rm \
-     -e PROVISION_SLUG=mi-restaurante -e PROVISION_NAME="Mi Restaurante" \
-     -e PROVISION_ADMIN_EMAIL=dueno@tu-dominio.com -e PROVISION_ADMIN_PASSWORD='(≥12 caracteres)' \
+     -e PROVISION_ADMIN_PASSWORD \
+     -e PROVISION_SLUG=mi-restaurante -e PROVISION_NAME="Mi Restaurante" -e PROVISION_ADMIN_EMAIL=dueno@tu-dominio.com \
      -e DATABASE_URL=postgres://retroburger_app:$DB_APP_PASSWORD@db:5432/retroburger api node dist/database/provision.js
+   unset PROVISION_ADMIN_PASSWORD
    ```
+   (`-e VAR` sin valor toma el de tu entorno.) Tras el primer ingreso cambia la contraseña desde la app.
    `PUBLIC_TENANT` del `.env.prod` debe ser ese slug. Entra en `https://admin.tu-dominio.com`, enrola el 2FA y **guarda los códigos de recuperación**.
 5. Configura en la app: sucursales, impresoras, perfil fiscal, correo (Configuración → Integraciones → «Enviar prueba»).
+
+### Variables de seguridad relevantes
+- `COOKIE_SECURE=true`, `CORS_ORIGINS` sin `localhost` y un secreto JWT no trivial: la API **se niega a arrancar** en producción si no se cumplen.
+- `TRUST_PROXY` (por defecto, redes privadas/loopback): de qué proxies se acepta `X-Forwarded-For`. Caddy sobrescribe la cabecera con la IP real; si pones otro balanceador/CDN delante, indica su CIDR. **No publiques el puerto de la API directamente.**
+- El seed de demostración se niega a correr con `NODE_ENV=production` (`ALLOW_DEMO_SEED=true` lo fuerza: no lo uses).
+- Agente de impresión: solo escribe en `/dev/…` y conecta a IP privadas por defecto; amplía con `AGENT_ALLOWED_PATHS`, `AGENT_ALLOWED_HOSTS` (lista separada por comas) o `AGENT_ALLOW_PUBLIC_HOSTS=1`.
 
 ## Actualizar y volver atrás
 - Actualizar: `git pull && docker compose … up -d --build` (migra antes de arrancar la API; las migraciones son sólo hacia adelante y cada una se aplica en transacción).

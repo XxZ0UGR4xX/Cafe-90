@@ -3,6 +3,14 @@
 ERP + POS + KDS + CRM + Inventario + Compras + Delivery para cadenas de hamburgueserías, con identidad visual de los años 90.
 Multi-sucursal y multi-tenant (SaaS). Arquitectura completa en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); estado real por módulo en [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
+## Pruebas reales con Docker (sin instalar nada más)
+
+```bash
+./scripts/demo.sh up        # migra, carga datos de demostración y levanta API + admin/POS + sitio del cliente
+# Admin/POS/KDS http://localhost:8080 · Cliente http://localhost:8081 · API http://localhost:3000/docs
+```
+Guía de recorridos, usuarios y qué es simulado: [`docs/UAT.md`](docs/UAT.md). Hallazgos de la auditoría y riesgos residuales: [`docs/AUDIT.md`](docs/AUDIT.md).
+
 ## Inicio rápido (desarrollo)
 
 Requisitos: Node 22, pnpm 10, PostgreSQL 16.

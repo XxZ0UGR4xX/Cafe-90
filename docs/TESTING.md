@@ -26,3 +26,8 @@ Para E2E: levantar API (`pnpm dev:api`), `pnpm dev:web`, `pnpm --filter @retrobu
 ## Accesibilidad y teclado
 - `e2e/tests/a11y.spec.ts`: axe-core (WCAG 2.1 A/AA) sobre **18 pantallas del admin**, 4 del sitio público y 18 diálogos/pestañas; falla con cualquier violación seria o crítica. Hallazgos corregidos: contraste del verde de texto (token `--ok-text`; `--neon-dark` sólo para bordes y rellenos), campos sin etiqueta y tableros desplazables sin foco de teclado.
 - `e2e/tests/keyboard.spec.ts` + pruebas de `RetroModal` en `packages/ui`: **teclear de corrido** en un modal (bug real: el foco volvía al primer campo en cada tecla) y trampa de Tab. Diálogos con nombre accesible.
+
+## Auditoría (controles de seguridad e integridad)
+- `apps/api/test/audit.test.ts`: alcance por sucursal (configuración, asignación de roles, ticket, impresoras, recursos de toda la cadena), sesiones revocables (logout con access token vencido, tenant suspendido), caja (gasto acumulado, depósitos, conteo ciego), superficie pública (QR en orden propia, loyalty por POST sin caché, 400 en vez de 500, reservaciones acotadas) y cupón de un solo uso.
+- `sales.test.ts` («auditoría: controles de dinero»): descuentos acumulados, revocación tras cancelar partidas, devolución parcial/idempotente/por medio de pago. `rate-limit-global.test.ts`: un Bearer inventado cae en el límite de su IP. `reports.test.ts`: el socket se desconecta al revocarse la sesión. `print-agent`: política local de rutas y hosts.
+- Entorno de pruebas reales: `./scripts/demo.sh up` y `docs/UAT.md`; el e2e corre contra esos contenedores con `E2E_BASE_URL=http://localhost:8080 E2E_PUBLIC_URL=http://localhost:8081 npx playwright test`.

@@ -12,13 +12,16 @@ Leyenda: ✅ implementado y probado · 🟡 parcial / base lista · ⏳ pendient
 | Redis/BullMQ | cache, pub/sub, colas | **Redis opcional** (`REDIS_URL`): rate-limit y adaptador Socket.IO compartidos entre réplicas (fail-open). Jobs siguen en proceso pero idempotentes y seguros con varias réplicas; sin BullMQ ni caché | suficiente para varias réplicas de la API; BullMQ sólo hará falta si aparecen trabajos pesados |
 | Descuento de inventario | al enviar a cocina | al enviar a cocina (D13 recomendada) | configurable en un solo punto |
 
+## Auditoría y pruebas reales
+✅ Auditoría de caja blanca en 4 frentes y corrección de los hallazgos (ver [`docs/AUDIT.md`](AUDIT.md): estado por hallazgo y riesgos residuales). ✅ Entorno de pruebas reales con un comando (`./scripts/demo.sh up`, [`docs/UAT.md`](UAT.md)) validado con las suites y el e2e.
+
 ## Módulos
 | Módulo | Estado | Notas |
 |---|---|---|
 | Multi-tenant (RLS), sucursales | ✅ | RLS forzada + prueba automática sobre todas las tablas |
 | Auth (login, refresh, PIN) / RBAC / auditoría | ✅ | **2FA TOTP** (RFC 6238, sin dependencias): reto en login, enrolamiento con QR, 10 códigos de recuperación de un solo uso, anti-replay, secreto cifrado AES-256-GCM, bloqueo por intentos, reinicio por administrador. Obligatorio para ADMIN/SUPER_ADMIN con `MFA_ENFORCE=true`; el PIN rápido nunca evita el 2FA. Jerarquía de privilegios al administrar usuarios (un gerente no edita a un ADMIN ni a otra sucursal) |
 | Catálogo, variantes, modificadores, combos, recetas, costos | ✅ | |
-| Inventario (kardex, lotes FEFO, mermas, ajustes, conteo físico, transferencias, alertas) | ✅ | conciliación kardex↔saldo probada; falta job de conciliación nocturna |
+| Inventario (kardex, lotes FEFO, mermas, ajustes, conteo físico, transferencias, alertas) | ✅ | conciliación kardex↔saldo probada y job nocturno; conteo físico contra la foto del saldo al contar; faltantes de transferencia como merma |
 | Compras (proveedores, cotización, OC, aprobación, recepción parcial, factura con cotejo) | ✅ | cuentas por pagar básico |
 | POS / pedidos / pagos mixtos / propinas / descuentos / división / cancelación / devolución | ✅ | autorización de supervisor por PIN |
 | Mesas y reservaciones | ✅ | **plano editable con arrastrar y soltar** (ratón, táctil y flechas del teclado; ajuste a cuadrícula, no se encima con otra mesa —validado también en el servidor—, auditado) + vista de tarjetas; reservaciones con anti-empalme por constraint |

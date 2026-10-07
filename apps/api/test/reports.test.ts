@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { io as client } from 'socket.io-client';
-import { Api, startApi } from './helpers';
+import { Api, PASSWORD, createUser, startApi } from './helpers';
 import { Fixture, buildFixture, item } from './fixtures';
 
 let api: Api; let f: Fixture; let today: string;
@@ -127,5 +127,19 @@ describe('tiempo real (WebSocket)', () => {
     const ev = await got;
     expect(ev.new).toBe(true); expect(ev.station).toBe('FREIDORA');
     sock.close();
+  });
+
+  it('un socket abierto se desconecta cuando su sesión se revoca (logout / usuario deshabilitado)', async () => {
+    const t = f.t; const u = await createUser(api, f.admin, t, 'COCINERO', [f.branchId], 'ws');
+    const l = await api.req('POST', '/auth/login', { body: { tenant: t.slug, email: u.email, password: PASSWORD } });
+    const port = (api.app.getHttpServer().address() as { port: number }).port;
+    const sock = client(`http://127.0.0.1:${port}`, { path: '/ws', auth: { token: l.body.accessToken }, transports: ['websocket'] });
+    await new Promise((res) => sock.on('ready', res));
+    const gone = new Promise<string>((res) => sock.on('disconnect', (r: string) => res(r)));
+    const cookie = /rb_refresh=([^;]+)/.exec(String(l.headers['set-cookie']))![1]!;
+    await api.req('POST', '/auth/logout', { headers: { 'x-requested-with': 'retroburger', cookie: `rb_refresh=${cookie}` }, body: {} });
+    const { RealtimeGateway } = await import('../src/modules/realtime/realtime.gateway');
+    expect(await api.app.get(RealtimeGateway).revalidate()).toBeGreaterThanOrEqual(1);
+    expect(await gone).toBeTruthy();
   });
 });

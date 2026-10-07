@@ -25,7 +25,8 @@ pnpm --filter @retroburger/print-agent build && pnpm --filter @retroburger/print
 - **Impresora apagada / sin red**: el trabajo queda `PENDING` (no se pierde ni gasta intentos); el agente reintenta con espera creciente (2 s → 60 s) y al volver imprime todo en orden.
 - **Fallo no recuperable** (impresora sin conexión configurada): cuenta un intento; al 3.º queda `FAILED`.
 - **Entrega al menos una vez**: si el agente se cae entre imprimir y confirmar, ese trabajo puede imprimirse otra vez.
+- **Política local**: el agente NO confía en lo que diga el servidor sobre el equipo. Solo escribe en dispositivos bajo `/dev/` y solo conecta a IP privadas (10/8, 172.16/12, 192.168/16, loopback; nunca 169.254.x). Para otros destinos: `AGENT_ALLOWED_PATHS=/ruta/,/otra/` (prefijos), `AGENT_ALLOWED_HOSTS=impresora.local,10.1.2.3`, o `AGENT_ALLOW_PUBLIC_HOSTS=1`. Un destino no permitido se trata como «sin conexión configurada». Ejecútalo con un usuario sin privilegios.
 - Seguridad: el agente sólo puede leer/confirmar trabajos de **su** sucursal; la cuenta no admite 2FA (es de servicio) y no tiene otros permisos.
 
 ## Probar sin impresora
-Conexión tipo *dispositivo* con una ruta a un archivo (`/tmp/ticket.bin`) y revisa los bytes; o `nc -l 9100 | xxd` como impresora de red falsa.
+Configura una impresora de **red** a `127.0.0.1:9100` y escucha con `nc -l 9100 | xxd` (impresora falsa): verás los bytes ESC/POS. La API solo acepta dispositivos `/dev/…` y red; no rutas de archivo arbitrarias.

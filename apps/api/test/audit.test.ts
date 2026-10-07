@@ -145,3 +145,14 @@ describe('cupones y descuentos', () => {
     expect(await total(b)).toBe(129);
   });
 });
+
+describe('recursos de toda la cadena', () => {
+  it('un gerente de sucursal no cambia menú/recetas/promociones globales, pero sí el precio de su sucursal', async () => {
+    const p = await api.req('PUT', `/products/${f.prod.papas}`, { token: f.tokens.gerente, body: { categoryId: undefined, sku: 'PAPAS', name: 'Papas', price: 1 } });
+    expect(p.status).toBe(403);
+    expect((await post('/promotions', f.tokens.gerente, { name: 'Mía', type: 'PERCENT', config: { percent: 50 } })).status).toBe(403);
+    const own = await put(`/branches/${f.branchId}/products/${f.prod.papas}`, f.tokens.gerente, { price: 52 });
+    expect(own.status, JSON.stringify(own.body)).toBe(200);
+    expect((await put(`/branches/${branch2}/products/${f.prod.papas}`, f.tokens.gerente, { price: 1 })).status).toBe(403);
+  });
+});
