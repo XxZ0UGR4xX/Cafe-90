@@ -42,7 +42,7 @@ describe('correo saliente', () => {
   it('flush envía una vez y marca SENT; segundo flush no repite', async () => {
     transport.sent.length = 0;
     expect(await asTenant(() => mail.flush())).toMatchObject({ sent: 1, failed: 0 });
-    expect(transport.sent).toHaveLength(1); expect(transport.sent[0]!.to).toEqual(['b@x.test']); expect(transport.sent[0]!.from).toContain('RetroBurger');
+    expect(transport.sent).toHaveLength(1); expect(transport.sent[0]!.to).toEqual(['b@x.test']); expect(transport.sent[0]!.from).toContain('Amerix Burger');
     expect((await outbox(`WHERE dedupe_key='k1'`))[0]).toMatchObject({ status: 'SENT', attempts: 1 });
     expect(await asTenant(() => mail.flush())).toEqual({ sent: 0, failed: 0 });
   });
@@ -90,7 +90,7 @@ describe('correos de negocio', () => {
     const m = transport.sent.find((x) => x.subject.includes(`A-${inv.folio}`))!;
     expect(m.to).toEqual(['facturas@uni.test']); expect(m.subject).toMatch(/^\[PRUEBA\]/);
     expect(m.attachments![0]).toMatchObject({ contentType: 'application/xml' }); expect(m.attachments![0]!.filename).toMatch(/^CFDI-A-\d+-[0-9A-F]{8}\.xml$/);
-    expect(m.attachments![0]!.content).toContain(`UUID="${inv.uuid}"`); expect(m.html).toContain('RETROBURGER');
+    expect(m.attachments![0]!.content).toContain(`UUID="${inv.uuid}"`); expect(m.html).toContain('AMERIX BURGER');
 
     const n = transport.sent.length;
     expect((await req('POST', `/invoices/${inv.id}/email`, f.tokens.cajero, { to: 'contador@uni.test' })).body).toEqual({ queued: true });

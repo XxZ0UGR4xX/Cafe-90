@@ -25,7 +25,7 @@ Requisitos: Docker + Docker Compose v2.
 | Cocina | `cocinero-centro@retroburger.test` | KDS |
 | Almacén | `almacen-centro@retroburger.test` | inventario, compras, transferencias |
 | Repartidor | `repartidor-centro@retroburger.test` | entregas propias |
-Hay datos de **Centro, Norte y Sur** y 21 días de ventas históricas. Cambia de sucursal arriba a la izquierda. En «PIN rápido» el código es la parte del correo antes de `@` (p. ej. `cajero-centro`) y el PIN `1990`; ese PIN también es el de supervisor.
+La carta es la de Amerix Burger (≈70 productos: hamburguesas sencilla/doble carne, ensaladas grande/mediana, paquetes 1–12, sándwiches, extras y bebidas). La sucursal «Jesús María» (código `centro`) es la real; Norte y Sur son de demostración. Hay 21 días de ventas históricas. Cambia de sucursal arriba a la izquierda. En «PIN rápido» el código es la parte del correo antes de `@` (p. ej. `cajero-centro`) y el PIN `1990`; ese PIN también es el de supervisor.
 
 > ⚠️ Es un entorno de **demostración**: contraseñas conocidas, timbrado fiscal **simulado**, sin pasarela de pagos, sin impresora física. No lo expongas a Internet.
 
@@ -35,7 +35,7 @@ Hay datos de **Centro, Norte y Sur** y 21 días de ventas históricas. Cambia de
 2. **Mesero**: abrir una mesa, agregar hamburguesa con modificadores (queso extra, sin cebolla) y papas → *Enviar a cocina*. Verifica que la mesa pasa a «ocupada».
 3. **Cocina (KDS)**: la comanda llega por estación; avanzar *Preparando → Listo*. Revisa colores/tiempos.
 4. **Cajero**: cobrar mixto (efectivo + tarjeta), con propina. Ticket en pantalla. La mesa se libera.
-5. **Inventario** (almacén/gerente): el consumo de insumos aparece en el kardex con la receta correcta.
+5. **Prueba la carta**: un paquete pide elegir refresco o agua fresca; las alitas, Hot Sauce o BBQ; «Amerix Familiar» es un combo de 4 paquetes #5. **Inventario** (almacén/gerente): el consumo de insumos aparece en el kardex con la receta correcta.
 6. **Cajero**: cerrar caja con **conteo ciego**. Provoca una diferencia > tolerancia y comprueba que pide comentario y PIN de gerente.
 
 ### Controles que deben funcionar (intenta romperlos)

@@ -6,7 +6,7 @@ export interface NavItem { to: string; icon: string; label: string; badge?: Reac
 export type NavEntry = NavItem | 'sep';
 
 // ───────────── RetroSidebar (gabinete arcade) ─────────────
-export function RetroSidebar({ items, collapsed, onToggle, footer, brand = 'RETROBURGER', tagline = 'DINER · POS · ERP' }: {
+export function RetroSidebar({ items, collapsed, onToggle, footer, brand = 'AMERIX BURGER', tagline = 'DINER · POS · ERP' }: {
   items: NavEntry[]; collapsed: boolean; onToggle: () => void; footer?: ReactNode; brand?: string; tagline?: string;
 }) {
   return (

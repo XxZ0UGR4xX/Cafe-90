@@ -39,7 +39,7 @@ export class MailService {
   /** Plantilla mínima con la identidad retro (HTML simple y compatible con clientes de correo). */
   static html(title: string, lines: string[]): string {
     return `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;border:3px solid #111;border-radius:8px;overflow:hidden">
-<div style="background:#d62828;color:#fff;padding:14px 18px;font-size:20px;font-weight:bold">🍔 RETROBURGER</div>
+<div style="background:#d62828;color:#fff;padding:14px 18px;font-size:20px;font-weight:bold">🍔 AMERIX BURGER</div>
 <div style="padding:18px"><h2 style="margin:0 0 12px">${esc(title)}</h2>${lines.map((l) => `<p style="margin:8px 0">${esc(l)}</p>`).join('')}</div>
 <div style="background:#f6b800;height:6px"></div></div>`;
   }
@@ -77,8 +77,8 @@ export class MailService {
 
   /** Correo de prueba inmediato (para verificar la configuración SMTP). */
   async sendTest(to: string) {
-    await this.db.tx((q) => this.enqueue(q, { to, subject: '✅ Prueba de correo · RetroBurger', kind: 'TEST', text: 'Si lees esto, el correo saliente funciona.',
-      html: MailService.html('Prueba de correo', ['Si lees esto, el correo saliente de RetroBurger funciona.', `Enviado por ${ctx().principal?.fullName ?? 'el sistema'}.`]) }));
+    await this.db.tx((q) => this.enqueue(q, { to, subject: '✅ Prueba de correo · Amerix Burger', kind: 'TEST', text: 'Si lees esto, el correo saliente funciona.',
+      html: MailService.html('Prueba de correo', ['Si lees esto, el correo saliente de Amerix Burger funciona.', `Enviado por ${ctx().principal?.fullName ?? 'el sistema'}.`]) }));
     return { ...(await this.flush()), transport: this.transport.kind };
   }
 }

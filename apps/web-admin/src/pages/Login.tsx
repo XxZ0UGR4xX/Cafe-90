@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PinPad, RetroButton, RetroCard, RetroInput, RetroTabs } from '@retroburger/ui';
+import { PinPad, RetroButton, RetroCard, RetroInput, RetroLogo, RetroTabs } from '@retroburger/ui';
 import { useSession } from '../app/auth';
 import { ApiError, api } from '../app/api';
 import { CodeInput, MfaQr, RecoveryCodes } from '../app/MfaEnroll';
@@ -69,7 +69,7 @@ export function Login() {
   return (
     <div className="rb-login">
       <div className="rb-login__card rb-col">
-        <div className="rb-hero"><div>🍔🍟🥤</div><h1>Retro <em>Burger</em></h1><p>ERP · POS · KDS — diner de los 50</p></div>
+        <div className="rb-hero"><div>🍔🍟🥤</div><h1><RetroLogo name="AMERIX BURGER" /></h1><p>ERP · POS · KDS</p></div>
         <RetroCard title="🍒 Bienvenido · Iniciar sesión" tone="red">
           <form className="rb-col" onSubmit={submit}>
             <RetroInput label="Restaurante" value={tenant} onChange={(e) => setTenant(e.target.value)} autoCapitalize="none" autoCorrect="off" required />

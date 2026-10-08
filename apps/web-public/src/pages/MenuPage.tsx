@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { RetroButton, RetroCard, RetroInput, RetroSelect, RetroSpinner, RetroTabs, useToast } from '@retroburger/ui';
+import { RetroButton, RetroCard, RetroInput, RetroLogo, RetroSelect, RetroSpinner, RetroTabs, useToast } from '@retroburger/ui';
 import { api, ApiError } from '../api';
 import { toItems, useCart } from '../cart';
 import { MenuBrowser } from './Shared';
@@ -22,7 +22,7 @@ export function MenuPage({ info }: { info: any }) {
   if (!info || menu.isLoading) return <RetroSpinner />;
   return (
     <div className="rb-col">
-      <div className="rb-hero"><div>🍔🍟🥤</div><h1>Retro <em>Burger</em></h1><p>Hamburguesas de diner · pide para recoger o a domicilio</p></div>
+      <div className="rb-hero"><div>🍔🍟🥤</div><h1><RetroLogo name={info?.restaurant?.name ?? 'AMERIX BURGER'} /></h1><p>Hamburguesas de diner · pide para recoger o a domicilio</p></div>
       <RetroSelect aria-label="Sucursal" label="Sucursal" value={cart.branchId ?? ''} onChange={(e) => cart.setBranch(e.target.value)} options={branches.map((b: any) => ({ value: b.id, label: `${b.name} — ${b.address ?? ''}` }))} />
       {menu.error ? <RetroCard title="⚠️" tone="red">No pudimos cargar el menú. Inténtalo de nuevo en un momento.</RetroCard> : menu.data && (
         <MenuBrowser menu={menu.data}>{(lines) => lines.length > 0 && (

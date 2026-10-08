@@ -50,7 +50,7 @@ export function Shell() {
   return (
     <SupervisorProvider>
       <RetroAppShell collapsed={collapsed} mobileOpen={mobile}
-        sidebar={<RetroSidebar items={buildNav(can)} collapsed={collapsed} onToggle={toggle}
+        sidebar={<RetroSidebar items={buildNav(can)} collapsed={collapsed} onToggle={toggle} brand={me.tenant.name}
           footer={<div className="rb-row" style={{ color: 'var(--cream)', padding: '2px 6px' }}><span style={{ fontSize: '1.4rem' }}>👤</span><span className="lbl" style={{ minWidth: 0 }}><strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.fullName}</strong><small style={{ opacity: .7 }}>{roles}</small></span></div>} />}
         navbar={<RetroNavbar title={titleOf(loc.pathname)} onMenu={() => setMobile((m) => !m)}>
           {(branches.data?.length ?? 0) > 0 && <RetroSelect aria-label="Sucursal" value={branchId ?? ''} onChange={(e) => { setBranch(e.target.value); qc.invalidateQueries(); }} options={branches.data!.map((b) => ({ value: b.id, label: b.name }))} />}

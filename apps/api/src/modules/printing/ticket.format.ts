@@ -18,7 +18,7 @@ const fmtDate = (d: string | Date) => new Date(d).toLocaleString('es-MX', { date
 
 export function renderReceipt(o: Dict, w = 42): string {
   const L: string[] = [];
-  L.push(center('** RETROBURGER **', w), center(o.branch?.restaurant ?? '', w), center(o.branch?.name ?? '', w));
+  L.push(center(`** ${o.branch?.restaurant ?? 'AMERIX BURGER'} **`, w), center(o.branch?.name ?? '', w));
   if (o.branch?.address) L.push(...wrap(o.branch.address, w).map((x) => center(x, w)));
   if (o.branch?.taxId) L.push(center(`RFC: ${o.branch.taxId}`, w));
   L.push(line(w), lr(`Orden #${String(o.number).padStart(4, '0')}`, fmtDate(o.createdAt), w));
@@ -39,7 +39,7 @@ export function renderReceipt(o: Dict, w = 42): string {
     const code = String(o.invoiceCode).replace(/(.{4})(?=.)/g, '$1-');
     L.push('', center('FACTURA TU CONSUMO', w), ...wrap(o.invoiceUrl ?? '', w).map((x) => center(x, w)), center(`Código: ${code}`, w));
   }
-  L.push('', center('¡Gracias por tu visita!', w), center('RETROBURGER · THE 90s BURGER EXPERIENCE', w), '');
+  L.push('', center('¡Gracias por tu visita!', w), center(`${o.branch?.restaurant ?? 'AMERIX BURGER'} · HAMBURGUESAS DE DINER`, w), '');
   return L.join('\n');
 }
 

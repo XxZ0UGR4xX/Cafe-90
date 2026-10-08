@@ -1,5 +1,5 @@
 /**
- * Seed de demostración RETROBURGER. Se ejecuta contra la API real (inject), así ejerce validaciones y auditoría.
+ * Seed de demostración AMERIX BURGER (carta real de la hamburguesería). Se ejecuta contra la API real (inject), así ejerce validaciones y auditoría.
  * Uso: pnpm db:seed   (requiere DATABASE_URL, JWT_ACCESS_SECRET). Datos SOLO para desarrollo/demostración.
  */
 import 'reflect-metadata';
@@ -33,8 +33,8 @@ export async function seedDemo(log: (m: string) => void = console.log) {
   const exists = (await db.system('SELECT resolve_tenant($1) AS t', ['retroburger'])).rows[0].t;
   if (exists) { log('⚠️  El tenant "retroburger" ya existe: seed omitido.'); await app.close(); return null; }
 
-  log('🍔 Creando tenant RETROBURGER…');
-  await prov.createTenant({ slug: 'retroburger', name: 'RETROBURGER', legalName: 'Retroburger S.A. de C.V.', admin: { email: ADMIN_EMAIL, fullName: 'Dueño Retroburger', password: ADMIN_PASSWORD } } as any);
+  log('🍔 Creando tenant AMERIX BURGER…');
+  await prov.createTenant({ slug: 'retroburger', name: 'AMERIX BURGER', legalName: 'Amerix Burger (demostración)', admin: { email: ADMIN_EMAIL, fullName: 'Dueño Amerix Burger', password: ADMIN_PASSWORD } } as any);
   const login = async (email: string, password: string) => (await call('POST', '/auth/login', undefined, { tenant: 'retroburger', email, password })).accessToken as string;
   const T = await login(ADMIN_EMAIL, ADMIN_PASSWORD);
 
@@ -55,7 +55,7 @@ export async function seedDemo(log: (m: string) => void = console.log) {
   for (const p of PRODUCTS) {
     prod[p.sku] = (await call('POST', '/products', T, {
       categoryId: cats[p.cat], kind: 'SIMPLE', sku: p.sku, name: p.name, description: p.desc, price: p.price, taxId: tax.id, stationKey: p.station,
-      prepTimeSec: p.prep, isAvailable: true, isInventoriable: true, sortOrder: 0,
+      prepTimeSec: p.prep, isAvailable: true, isInventoriable: true, sortOrder: PRODUCTS.indexOf(p) * 10,   // el orden de la carta
       variants: (p.variants ?? []).map((v) => ({ name: v.name, priceDelta: v.priceDelta, qtyFactor: v.qtyFactor ?? 1 })),
       modifierGroupIds: (p.groups ?? []).map((g) => groups[g]),
       recipe: Object.entries(p.recipe).map(([sku, qty]) => ({ ingredientId: ing[sku], qty, wastePct: 0 })),
@@ -63,8 +63,8 @@ export async function seedDemo(log: (m: string) => void = console.log) {
   }
   for (const c of COMBOS)
     prod[c.sku] = (await call('POST', '/products', T, {
-      categoryId: cats['Combos'], kind: 'COMBO', sku: c.sku, name: c.name, description: c.desc, price: c.price, taxId: tax.id, stationKey: null, prepTimeSec: 600,
-      isAvailable: true, isInventoriable: false, sortOrder: 0, variants: [], modifierGroupIds: [],
+      categoryId: cats['Paquetes'], kind: 'COMBO', sku: c.sku, name: c.name, description: c.desc, price: c.price, taxId: tax.id, stationKey: null, prepTimeSec: 600,
+      isAvailable: true, isInventoriable: false, sortOrder: PRODUCTS.findIndex((x) => x.sku === 'PAQ12') * 10 - 5,   // entre el paquete 10 y el 12 variants: [], modifierGroupIds: [],
       comboSlots: c.slots.map((s) => ({ name: s.name, defaultProductId: prod[s.default], options: s.options.map(([sku, d]) => ({ productId: prod[sku as string], priceDelta: d })) })),
     })).id;
 

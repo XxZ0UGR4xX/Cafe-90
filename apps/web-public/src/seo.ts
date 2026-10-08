@@ -1,21 +1,21 @@
 /** SEO del sitio público: títulos/descripciones por página, páginas privadas fuera de buscadores y datos estructurados de Restaurante. */
 export interface PageMeta { title: string; description: string; noindex: boolean }
 
-const BASE = 'RETROBURGER · The 90s Burger Experience';
+const BASE = 'AMERIX BURGER · Hamburguesas de diner';
 const PAGES: { test: RegExp; meta: PageMeta }[] = [
-  { test: /^\/reservar\/?$/, meta: { title: 'Reservar mesa · RETROBURGER', description: 'Reserva tu mesa en RETROBURGER: elige sucursal, fecha, hora y número de personas. Confirmación inmediata.', noindex: false } },
-  { test: /^\/puntos\/?$/, meta: { title: 'Mis puntos · RETROBURGER', description: 'Consulta tus puntos y recompensas del programa de lealtad de RETROBURGER.', noindex: false } },
+  { test: /^\/reservar\/?$/, meta: { title: 'Reservar mesa · AMERIX BURGER', description: 'Reserva tu mesa en AMERIX BURGER: elige sucursal, fecha, hora y número de personas. Confirmación inmediata.', noindex: false } },
+  { test: /^\/puntos\/?$/, meta: { title: 'Mis puntos · AMERIX BURGER', description: 'Consulta tus puntos y recompensas del programa de lealtad de AMERIX BURGER.', noindex: false } },
   // páginas con datos de una persona o de una mesa: nunca en buscadores
-  { test: /^\/factura\/?$/, meta: { title: 'Factura tu consumo · RETROBURGER', description: 'Genera tu factura electrónica (CFDI) con el código de tu ticket.', noindex: true } },
-  { test: /^\/pedido\//, meta: { title: 'Seguimiento de tu pedido · RETROBURGER', description: 'Sigue el estado de tu pedido en tiempo real.', noindex: true } },
-  { test: /^\/m\//, meta: { title: 'Pide desde tu mesa · RETROBURGER', description: 'Pide y paga desde tu mesa.', noindex: true } },
+  { test: /^\/factura\/?$/, meta: { title: 'Factura tu consumo · AMERIX BURGER', description: 'Genera tu factura electrónica (CFDI) con el código de tu ticket.', noindex: true } },
+  { test: /^\/pedido\//, meta: { title: 'Seguimiento de tu pedido · AMERIX BURGER', description: 'Sigue el estado de tu pedido en tiempo real.', noindex: true } },
+  { test: /^\/m\//, meta: { title: 'Pide desde tu mesa · AMERIX BURGER', description: 'Pide y paga desde tu mesa.', noindex: true } },
 ];
 
 export function metaFor(pathname: string, restaurant?: string | null): PageMeta {
   const hit = PAGES.find((p) => p.test.test(pathname));
   if (hit) return hit.meta;
-  const name = restaurant ? restaurant.toUpperCase() : 'RETROBURGER';
-  return { title: restaurant ? `${name} · hamburguesas estilo años 90` : BASE, description: `${name} — hamburguesas estilo años 90. Pide para recoger o a domicilio, reserva tu mesa y acumula puntos.`, noindex: false };
+  const name = restaurant ? restaurant.toUpperCase() : 'AMERIX BURGER';
+  return { title: restaurant ? `${name} · hamburguesas de diner` : BASE, description: `${name} — hamburguesas de diner. Pide para recoger o a domicilio, reserva tu mesa y acumula puntos.`, noindex: false };
 }
 
 interface InfoLike { restaurant?: { name?: string } | null; branches?: { name: string; address?: string | null; phone?: string | null; status?: string }[] }

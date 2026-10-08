@@ -16,12 +16,13 @@ export function App() {
   const { pathname } = useLocation();
   useEffect(() => { applyMeta(metaFor(pathname, info.data?.restaurant?.name), `${window.location.origin}${pathname === '/' ? '/' : pathname}`); }, [pathname, info.data]);
   useEffect(() => { applyJsonLd(restaurantJsonLd(info.data, window.location.origin)); }, [info.data]);
+  const brand = info.data?.restaurant?.name ?? 'AMERIX BURGER';
   const nav = ({ isActive }: { isActive: boolean }) => `rb-btn rb-btn--sm ${isActive ? '' : 'rb-btn--white'}`;
   return (
     <>
       <header style={{ background: 'var(--ink)', color: 'var(--cream)' }}>
         <div className="rb-row rb-wrap" style={{ maxWidth: 1100, margin: '0 auto', padding: '10px 16px' }}>
-          <Link to="/" className="rb-sitelogo" aria-label="RetroBurger, inicio"><RetroLogo name="RETROBURGER" /></Link>
+          <Link to="/" className="rb-sitelogo" aria-label={`${brand}, inicio`}><RetroLogo name={brand} /></Link>
           <nav className="rb-row rb-wrap rb-end"><NavLink to="/" end className={nav}>Menú</NavLink><NavLink to="/reservar" className={nav}>Reservar</NavLink><NavLink to="/puntos" className={nav}>Mis puntos</NavLink><NavLink to="/factura" className={nav}>Facturar</NavLink></nav>
         </div>
         <div className="rb-checker" />
@@ -36,7 +37,7 @@ export function App() {
           <Route path="/m/:token" element={<QrPage />} />
         </Routes>
       </main>
-      <footer className="rb-hint" style={{ textAlign: 'center', padding: 24 }}>© RETROBURGER · HAMBURGUESAS DE DINER</footer>
+      <footer className="rb-hint" style={{ textAlign: 'center', padding: 24 }}>© {brand} · HAMBURGUESAS DE DINER</footer>
     </>
   );
 }

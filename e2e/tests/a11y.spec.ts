@@ -52,7 +52,7 @@ test('accesibilidad: diálogos y pestañas (producto, cobro, mesa, pedido, factu
   await page.getByRole('tab', { name: /Seguridad/ }).click(); await page.getByRole('button', { name: 'Activar 2FA' }).click(); await check('Diálogo · activar 2FA'); await page.keyboard.press('Escape');
 
   await go('/pos');
-  await page.locator('.rb-product, [data-testid="product-card"], button.rb-prod').first().click({ timeout: 4000 }).catch(async () => { await page.getByText('Retro Burger').first().click(); });
+  await page.locator('.rb-product, [data-testid="product-card"], button.rb-prod').first().click({ timeout: 4000 }).catch(async () => { await page.getByText('Regular').first().click(); });
   await check('Diálogo · producto con modificadores'); await page.keyboard.press('Escape');
 
   await go('/tables');

@@ -120,8 +120,17 @@ export function RetroSpinner({ label = 'Cargando…' }: { label?: string }) {
 export function RetroEmpty({ icon = '🍟', children }: { icon?: string; children: ReactNode }) { return <div className="rb-empty"><div className="big">{icon}</div>{children}</div>; }
 
 
-/** Logotipo de letrero cursivo: «RETROBURGER» se compone como «Retro Burger» (la segunda palabra en rojo cereza). */
-export function RetroLogo({ name = 'RETROBURGER', className }: { name?: string; className?: string }) {
+/** Divide un nombre de negocio en [resto, última palabra] con mayúscula inicial: «AMERIX BURGER» → «Amerix» + «Burger» (la última, en rojo cereza). */
+export function brandParts(name: string): [string, string] {
+  const cap = (w: string) => (w ? w[0]!.toUpperCase() + w.slice(1).toLowerCase() : w);
   const m = /^(retro)(burger)$/i.exec(name.trim());
-  return <span className={cx('rb-logo', className)}>{m ? <>Retro <em>Burger</em></> : name}</span>;
+  const words = m ? [m[1]!, m[2]!] : name.trim().split(/\s+/);
+  const last = cap(words[words.length - 1] ?? '');
+  return [words.slice(0, -1).map(cap).join(' '), last];
+}
+
+/** Logotipo de letrero cursivo: «Amerix <em>Burger</em>» (la última palabra en rojo cereza). */
+export function RetroLogo({ name = 'AMERIX BURGER', className }: { name?: string; className?: string }) {
+  const [head, tail] = brandParts(name);
+  return <span className={cx('rb-logo', className)}>{head ? <>{head} <em>{tail}</em></> : tail}</span>;
 }

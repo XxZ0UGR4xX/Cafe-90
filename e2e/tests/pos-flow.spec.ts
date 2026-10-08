@@ -16,13 +16,13 @@ test('venta completa: mesa → POS → cocina (KDS) → cobro → caja', async (
   await page.getByRole('button', { name: /Elegir mesa/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: /Libre/ }).first().click();
   // hamburguesa con modificadores
-  await page.getByRole('button', { name: /^Retro Burger/ }).click();
+  await page.getByRole('button', { name: /^Regular/ }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  const dlg = page.getByRole('dialog'); await dlg.getByText('Queso extra').click(); await dlg.getByText('Cebolla').first().click();
+  const dlg = page.getByRole('dialog'); await dlg.getByRole('checkbox', { name: /Queso amarillo/ }).check(); await dlg.getByRole('checkbox', { name: /Sin cebolla/i }).check();
   await page.screenshot({ path: `${S}/04-modifiers.png` });
   await page.getByRole('button', { name: /Agregar/ }).click();
-  await page.getByRole('button', { name: /^Papas Clásicas/ }).click();
-  await page.getByRole('button', { name: /^Cola Retro/ }).click(); await page.getByRole('button', { name: /Regular/ }).click(); await page.getByRole('button', { name: /Agregar/ }).click();
+  await page.getByRole('button', { name: /^Banderillas/ }).click();
+  await page.getByRole('button', { name: /^Malteada/ }).click(); await page.getByRole('button', { name: /Vainilla/ }).click(); await page.getByRole('button', { name: /Agregar/ }).click();
   await page.screenshot({ path: `${S}/05-ticket.png` });
   await page.getByRole('button', { name: /Enviar cocina/ }).click();
   await expect(page.getByText(/enviada a cocina/)).toBeVisible();

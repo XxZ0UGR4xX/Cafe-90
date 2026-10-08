@@ -1,6 +1,6 @@
-# 🍔 RETROBURGER ERP
+# 🍔 AMERIX BURGER ERP
 
-ERP + POS + KDS + CRM + Inventario + Compras + Delivery para cadenas de hamburgueserías, con identidad visual de los años 90.
+ERP + POS + KDS + CRM + Inventario + Compras + Delivery para cadenas de hamburgueserías, con estética de diner de los 50 (rombos blanco y negro, rojo cereza, neón rosa). La demostración trae la carta real de Amerix Burger (hamburguesas, ensaladas, paquetes 1–12, sándwiches, extras y bebidas).
 Multi-sucursal y multi-tenant (SaaS). Arquitectura completa en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); estado real por módulo en [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 ## Pruebas reales con Docker (sin instalar nada más)

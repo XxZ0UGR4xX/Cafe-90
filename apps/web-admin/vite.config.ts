@@ -9,7 +9,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: { globPatterns: ['**/*.{js,css,html,woff2,svg,png}'], navigateFallbackDenylist: [/^\/ws/], maximumFileSizeToCacheInBytes: 4_000_000 },
-      manifest: { name: 'RETROBURGER ERP', short_name: 'RETROBURGER', description: 'ERP + POS + KDS para hamburgueserías', theme_color: '#d62828', background_color: '#fff4dc', display: 'standalone', start_url: '/', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] },
+      manifest: { name: 'AMERIX BURGER ERP', short_name: 'AMERIX BURGER', description: 'ERP + POS + KDS para hamburgueserías', theme_color: '#c8102e', background_color: '#f7f3ec', display: 'standalone', start_url: '/', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] },
     }),
   ],
   resolve: { alias: { '@retroburger/shared': resolve(__dirname, '../../packages/shared/src/index.ts') } },
