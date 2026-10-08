@@ -1,0 +1,13 @@
+# Saltos de línea LF siempre: los scripts y plantillas corren dentro de contenedores Linux.
+# Sin esto, un `git clone` en Windows los convierte a CRLF y fallan («exit 127», migraciones que no corren).
+* text=auto eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+*.template text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.png binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
